@@ -1,7 +1,10 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 from fastapi import Depends, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.routers.auth import router as auth_router
 from app.routers.profiles import router as profiles_router
@@ -21,6 +24,18 @@ from app.routers.activity_log import router as activity_log_router
 from app.routers.admin import router as admin_router
 
 app = FastAPI()
+
+# ── Static file serving untuk uploads ──────────────────────────────────────
+# File disimpan di backend/uploads/work-evidence/
+# Dapat diakses via http://127.0.0.1:8000/uploads/work-evidence/<filename>
+UPLOADS_DIR = Path("uploads")
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+app.mount(
+    "/uploads",
+    StaticFiles(directory=str(UPLOADS_DIR)),
+    name="uploads"
+)
 
 # Add CORS middleware
 app.add_middleware(
