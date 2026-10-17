@@ -10,7 +10,13 @@ from app.models.employer_profile import EmployerProfile
 from app.models.task import Task
 from app.models.user import User
 from app.models.worker_profile import WorkerProfile
-from app.schemas.assignment import (AssignmentCreate, AssignmentResponse, AssignmentStatusUpdate)
+from app.models.category import Category
+from app.schemas.assignment import (
+    AssignmentCreate,
+    AssignmentResponse,
+    AssignmentStatusUpdate,
+    WorkerJobResponse,
+)
 
 from app.utils.dependencies import get_current_user, get_session
 
@@ -203,6 +209,121 @@ def get_my_assignments(
     }
 
     return list(unique_assignments.values())
+
+
+# =========================================================
+# GET WORKER MY-JOBS  (enriched, worker-only)
+# =========================================================
+
+@router.get(
+    "/worker/my-jobs",
+    response_model=list[WorkerJobResponse],
+    summary="Pekerjaan Saya (Worker) — dengan detail task & employer",
+)
+def get_worker_my_jobs(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """
+    Mengembalikan semua assignment yang dimiliki worker yang sedang login,
+    diperkaya dengan informasi task, kategori, dan employer.
+
+    Hanya assignment yang terhubung dengan application berstatus *accepted*
+    yang dapat muncul di sini — karena assignment hanya dibuat dari
+    application accepted (dijaga oleh POST /assignments).
+
+    Otorisasi: worker hanya dapat melihat assignment miliknya sendiri
+    (difilter berdasarkan worker_profile.user_id == current_user.id).
+    """
+    # 1. Pastikan user punya Worker Profile
+    worker_profile = session.exec(
+        select(WorkerProfile).where(
+            WorkerProfile.user_id == current_user.id
+        )
+    ).first()
+
+    if not worker_profile:
+        raise HTTPException(
+            status_code=403,
+            detail="Anda belum memiliki Worker Profile",
+        )
+
+    # 2. Ambil semua application milik worker ini
+    worker_applications = session.exec(
+        select(Application).where(
+            Application.worker_id == worker_profile.id,
+            Application.status == "accepted",
+        )
+    ).all()
+
+    if not worker_applications:
+        return []
+
+    worker_app_map = {app.id: app for app in worker_applications}
+
+    # 3. Ambil semua assignment yang terhubung ke application tersebut
+    assignments = session.exec(
+        select(Assignment).where(
+            Assignment.application_id.in_(list(worker_app_map.keys()))
+        )
+    ).all()
+
+    if not assignments:
+        return []
+
+    # 4. Enrich setiap assignment dengan task, kategori, dan employer
+    result: list[WorkerJobResponse] = []
+
+    for assignment in assignments:
+        application = worker_app_map.get(assignment.application_id)
+
+        if not application:
+            continue
+
+        task = session.get(Task, application.task_id)
+
+        if not task:
+            continue
+
+        # Kategori
+        category = session.get(Category, task.category_id)
+
+        # Employer (hanya display_name — tidak bocorkan data pribadi)
+        employer_profile = session.get(EmployerProfile, task.employer_id)
+        employer_display = (
+            employer_profile.display_name
+            if employer_profile
+            else "Employer tidak ditemukan"
+        )
+
+        result.append(
+            WorkerJobResponse(
+                assignment_id=assignment.id,
+                assignment_status=assignment.status,
+                assignment_created_at=assignment.created_at,
+                started_at=assignment.started_at,
+                submitted_at=assignment.submitted_at,
+                approved_at=assignment.approved_at,
+                completed_at=assignment.completed_at,
+                application_id=application.id,
+                applied_at=application.applied_at,
+                task_id=task.id,
+                task_title=task.title,
+                task_description=task.description,
+                task_location=task.location,
+                task_status=task.status,
+                wage_amount=task.wage_amount,
+                payment_method=task.payment_method,
+                category_id=task.category_id,
+                category_name=category.name if category else None,
+                employer_display_name=employer_display,
+            )
+        )
+
+    # Urutkan: yang paling baru dibuat terlebih dahulu
+    result.sort(key=lambda r: r.assignment_created_at, reverse=True)
+
+    return result
 
 
 # =========================================================

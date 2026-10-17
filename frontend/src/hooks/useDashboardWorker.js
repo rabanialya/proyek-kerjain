@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   fetchMyApplications,
+  fetchMyWorkerJobs,
   fetchMyWorkerProfile,
   fetchPublishedTasks,
 } from '../lib/api'
@@ -24,6 +25,7 @@ export function useDashboardWorker() {
   const [workerProfile, setWorkerProfile] = useState(null)
   const [applications, setApplications] = useState([])
   const [recentTasks, setRecentTasks] = useState([])
+  const [activeJobsCount, setActiveJobsCount] = useState(0)
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -33,13 +35,14 @@ export function useDashboardWorker() {
     setError(null)
 
     try {
-      // Panggil ketiga endpoint paralel — lebih cepat, dan kegagalan satu
+      // Panggil keempat endpoint paralel — lebih cepat, dan kegagalan satu
       // tidak memblokir yang lain.
-      const [profileResult, applicationsResult, tasksResult] =
+      const [profileResult, applicationsResult, tasksResult, jobsResult] =
         await Promise.allSettled([
           fetchMyWorkerProfile(),
           fetchMyApplications(),
           fetchPublishedTasks(),
+          fetchMyWorkerJobs(),
         ])
 
       // Worker Profile
@@ -68,6 +71,18 @@ export function useDashboardWorker() {
         console.warn('Gagal mengambil tasks:', tasksResult.reason)
         setRecentTasks([])
       }
+
+      // Jumlah pekerjaan aktif (assigned + in_progress + submitted).
+      if (jobsResult.status === 'fulfilled') {
+        const jobs = jobsResult.value ?? []
+        const activeStatuses = ['assigned', 'in_progress', 'submitted']
+        setActiveJobsCount(
+          jobs.filter((j) => activeStatuses.includes(j.assignment_status)).length,
+        )
+      } else {
+        console.warn('Gagal mengambil worker jobs:', jobsResult.reason)
+        setActiveJobsCount(0)
+      }
     } catch (err) {
       setError(err.message ?? 'Gagal memuat data dashboard.')
     } finally {
@@ -92,6 +107,7 @@ export function useDashboardWorker() {
     applications,
     applicationSummary,
     recentTasks,
+    activeJobsCount,
     loading,
     error,
     reload: load,
