@@ -1,6 +1,12 @@
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
+
+
+class WorkerProfileCreate(BaseModel):
+    bio: str | None = None
+    skills: str | None = None
+    accepted_payment_methods: str | None = None
 
 
 class WorkerProfileUpdate(BaseModel):
