@@ -12,6 +12,8 @@ from app.schemas.application import (
     ApplicationCreate,
     ApplicationResponse,
     ApplicationStatusUpdate,
+    ApplicationWithWorkerResponse,
+    WorkerSummary,
 )
 from app.utils.dependencies import get_current_user, get_session
 
@@ -107,7 +109,7 @@ def create_application(
 
 
 # ==========================================
-# GET MY APPLICATIONS
+# GET MY APPLICATIONS (WORKER)
 # ==========================================
 
 @router.get(
@@ -138,6 +140,109 @@ def get_my_applications(
     ).all()
 
     return applications
+
+
+# ==========================================
+# GET APPLICATIONS BY TASK (EMPLOYER)
+# — Harus terdaftar SEBELUM /{application_id}
+#   agar path literal "task" tidak tertangkap
+#   oleh parameter UUID.
+# ==========================================
+
+@router.get(
+    "/task/{task_id}",
+    response_model=list[ApplicationWithWorkerResponse],
+)
+def get_applications_by_task(
+    task_id: UUID,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """
+    Employer melihat semua lamaran untuk task miliknya.
+    Mengembalikan data lamaran beserta informasi ringkas worker.
+    """
+    # Pastikan user punya Employer Profile
+    employer_profile = session.exec(
+        select(EmployerProfile).where(
+            EmployerProfile.user_id == current_user.id
+        )
+    ).first()
+
+    if not employer_profile:
+        raise HTTPException(
+            status_code=403,
+            detail="Anda belum memiliki Employer Profile",
+        )
+
+    # Pastikan task ada
+    task = session.get(Task, task_id)
+
+    if not task:
+        raise HTTPException(
+            status_code=404,
+            detail="Task tidak ditemukan",
+        )
+
+    # Pastikan task milik employer yang login
+    if task.employer_id != employer_profile.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Anda tidak memiliki akses ke task ini",
+        )
+
+    # Ambil semua lamaran untuk task ini
+    applications = session.exec(
+        select(Application).where(
+            Application.task_id == task_id
+        )
+    ).all()
+
+    result = []
+    for app in applications:
+        # Ambil WorkerProfile
+        worker_profile = session.get(WorkerProfile, app.worker_id)
+
+        if not worker_profile:
+            continue
+
+        # Ambil data User dari worker_profile.user_id
+        worker_user = session.get(User, worker_profile.user_id)
+
+        if not worker_user:
+            continue
+
+        worker_summary = WorkerSummary(
+            worker_profile_id=worker_profile.id,
+            user_id=worker_user.id,
+            full_name=worker_user.full_name,
+            email=worker_user.email,
+            bio=worker_profile.bio,
+            skills=worker_profile.skills,
+            accepted_payment_methods=worker_profile.accepted_payment_methods,
+            rating_avg=worker_profile.rating_avg,
+        )
+
+        result.append(
+            ApplicationWithWorkerResponse(
+                id=app.id,
+                task_id=app.task_id,
+                worker_id=app.worker_id,
+                status=app.status,
+                applied_at=app.applied_at,
+                worker=worker_summary,
+            )
+        )
+
+    # Urutkan: pending di atas, lalu berdasarkan waktu apply
+    result.sort(
+        key=lambda a: (
+            0 if a.status == "pending" else 1,
+            a.applied_at,
+        )
+    )
+
+    return result
 
 
 # ==========================================
@@ -206,7 +311,7 @@ def get_application(
 
 
 # ==========================================
-# UPDATE APPLICATION STATUS
+# UPDATE APPLICATION STATUS (EMPLOYER)
 # ==========================================
 
 @router.put(
@@ -307,7 +412,7 @@ def update_application_status(
 
 
 # ==========================================
-# DELETE / CANCEL APPLICATION
+# DELETE / CANCEL APPLICATION (WORKER)
 # ==========================================
 
 @router.delete(

@@ -1,8 +1,10 @@
 from fastapi import FastAPI
 from fastapi.openapi.utils import get_openapi
 from fastapi import Depends, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers.auth import router as auth_router
+from app.routers.profiles import router as profiles_router
 from app.routers.worker_profile import router as worker_profile_router
 from app.routers.employer_profile import router as employer_profile_router
 from app.routers.category import router as category_router
@@ -20,7 +22,17 @@ from app.routers.admin import router as admin_router
 
 app = FastAPI()
 
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],  # Adjust this to your frontend's origin in production
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(auth_router)
+app.include_router(profiles_router)
 app.include_router(worker_profile_router)
 app.include_router(work_evidence_router)
 app.include_router(employer_profile_router)

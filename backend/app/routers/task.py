@@ -39,9 +39,45 @@ def get_tasks(
     return tasks
 
 
+
 # =========================================================
-# GET TASK DETAIL
+# GET MY TASKS (EMPLOYER)
 # =========================================================
+
+@router.get(
+    "/my",
+    response_model=list[TaskResponse],
+)
+def get_my_tasks(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """
+    Employer mengambil semua task miliknya (semua status: draft, published, closed).
+    Diurutkan dari yang terbaru dibuat.
+    """
+    employer_profile = session.exec(
+        select(EmployerProfile).where(
+            EmployerProfile.user_id == current_user.id
+        )
+    ).first()
+
+    if not employer_profile:
+        raise HTTPException(
+            status_code=403,
+            detail="Anda belum memiliki Employer Profile",
+        )
+
+    tasks = session.exec(
+        select(Task).where(
+            Task.employer_id == employer_profile.id
+        ).order_by(Task.created_at.desc())
+    ).all()
+
+    return tasks
+
+
+
 
 @router.get("/{task_id}", response_model=TaskResponse)
 def get_task(
