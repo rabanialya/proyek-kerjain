@@ -147,9 +147,113 @@ export async function fetchMyAssignments() {
   return apiRequestAuth('/assignments/my')
 }
 
+// GET /assignments/worker/my-jobs — pekerjaan Worker yang sedang login, diperkaya
+// dengan detail task, kategori, dan employer. Hanya assignment dari application accepted.
+// Response: WorkerJobResponse[]
+export async function fetchMyWorkerJobs() {
+  return apiRequestAuth('/assignments/worker/my-jobs')
+}
+
+// GET /assignments/:id — detail satu assignment (worker atau employer pemilik).
+export async function fetchAssignmentById(assignmentId) {
+  return apiRequestAuth(`/assignments/${assignmentId}`)
+}
+
+// PUT /assignments/:id/status — ubah status assignment.
+// Worker: in_progress | submitted. Employer: approved | disputed.
+export async function updateAssignmentStatus(assignmentId, status) {
+  return apiRequestAuth(`/assignments/${assignmentId}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ status }),
+  })
+}
+
+// ─── Work Evidence ─────────────────────────────────────────────────────────
+
+// POST /work-evidences/:assignmentId — upload satu atau beberapa file bukti.
+// files: FileList atau array of File
+// Mengembalikan array WorkEvidenceResponse: { id, assignment_id, file_url, uploaded_at }
+export async function uploadWorkEvidence(assignmentId, files) {
+  const token = getAuthToken()
+  if (!token) {
+    throw new Error('Tidak ada sesi aktif. Silakan login kembali.')
+  }
+
+  const formData = new FormData()
+  for (const file of files) {
+    formData.append('files', file)
+  }
+
+  const response = await fetch(`${API_BASE_URL}/work-evidences/${assignmentId}`, {
+    method: 'POST',
+    headers: {
+      // Jangan set Content-Type manual — browser akan set boundary multipart otomatis.
+      Authorization: `Bearer ${token}`,
+    },
+    body: formData,
+  })
+
+  const data = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    const message =
+      typeof data?.detail === 'string'
+        ? data.detail
+        : 'Gagal mengunggah bukti pekerjaan.'
+    throw new Error(message)
+  }
+
+  return data
+}
+
+// GET /work-evidences/:assignmentId — ambil semua bukti milik assignment.
+// Hanya bisa diakses oleh Worker pemilik atau Employer pemilik task.
+export async function fetchWorkEvidences(assignmentId) {
+  return apiRequestAuth(`/work-evidences/${assignmentId}`)
+}
+
 // ─── Categories ────────────────────────────────────────────────────────────
 
 // GET /categories — semua kategori (digunakan saat membuat task).
 export async function fetchCategories() {
   return apiRequest('/categories')
+}
+
+// ─── Update Profile ─────────────────────────────────────────────────────────
+
+// PUT /profiles/worker — partial update profil Worker.
+// Hanya field yang disertakan dalam body yang akan diperbarui.
+// body: Partial<WorkerProfileFields>
+export async function updateWorkerProfile(body) {
+  return apiRequestAuth('/profiles/worker', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+}
+
+// PUT /profiles/employer — partial update profil Employer.
+// Hanya field yang disertakan dalam body yang akan diperbarui.
+// body: Partial<EmployerProfileFields>
+export async function updateEmployerProfile(body) {
+  return apiRequestAuth('/profiles/employer', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+}
+
+// GET /tasks/:id/owner — detail task milik employer yang login (semua status: draft, published, closed).
+// Digunakan halaman Edit Task agar form bisa diisi data existing.
+// Melempar Error jika task tidak ditemukan atau bukan milik user yang login.
+export async function fetchMyTaskById(taskId) {
+  return apiRequestAuth(`/tasks/${taskId}/owner`)
+}
+
+// PUT /tasks/:id — partial update task (hanya field yang dikirim yang diperbarui).
+// body: Partial<{ category_id, title, description, location, worker_needed, wage_amount, payment_method }>
+// Melempar Error jika task tidak ditemukan, bukan milik user, atau task sudah closed.
+export async function updateTask(taskId, body) {
+  return apiRequestAuth(`/tasks/${taskId}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
 }

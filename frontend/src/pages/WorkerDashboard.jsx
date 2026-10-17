@@ -97,6 +97,7 @@ export default function WorkerDashboard() {
     applicationSummary,
     applications,
     recentTasks,
+    activeJobsCount,
     loading,
     error,
     reload,
@@ -113,6 +114,7 @@ export default function WorkerDashboard() {
               <SkeletonBlock key={i} className="h-20" />
             ))}
           </div>
+          <SkeletonBlock className="h-20" />
           <SkeletonBlock className="h-40" />
           <SkeletonBlock className="h-56" />
         </div>
@@ -145,41 +147,92 @@ export default function WorkerDashboard() {
     <main className="min-h-screen bg-slate-100 px-4 py-8">
       <div className="mx-auto max-w-2xl space-y-6">
 
-        {/* ── Header kartu profil ── */}
+        {/* ── Kartu profil Worker ── */}
         <section className="rounded-2xl bg-white p-6 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xl">🔨</span>
-                <span className="text-xs font-semibold uppercase tracking-widest text-blue-600">
-                  Worker
-                </span>
+          <div className="flex items-start gap-4">
+            {/* Avatar inisial */}
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-xl font-bold text-white select-none">
+              {(workerProfile?.nickname ?? user?.full_name ?? '?')[0].toUpperCase()}
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-semibold uppercase tracking-widest text-blue-600">
+                      Worker
+                    </span>
+                    {workerProfile?.status_pekerjaan && (
+                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700">
+                        {workerProfile.status_pekerjaan}
+                      </span>
+                    )}
+                  </div>
+                  <h1 className="mt-0.5 text-lg font-bold text-slate-900 leading-tight">
+                    {workerProfile?.nickname
+                      ? `${workerProfile.nickname} · ${user?.full_name}`
+                      : user?.full_name}
+                  </h1>
+                  {workerProfile?.location && (
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      📍 {workerProfile.location}
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={() => navigate('/dashboard')}
+                  className="shrink-0 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  Ganti peran
+                </button>
               </div>
-              <h1 className="mt-2 text-xl font-bold text-slate-900">
-                Halo, {user?.full_name}!
-              </h1>
+
+              {/* Bio */}
               {workerProfile?.bio ? (
-                <p className="mt-1 text-sm text-slate-500 line-clamp-2">
+                <p className="mt-2 text-sm text-slate-500 line-clamp-2">
                   {workerProfile.bio}
                 </p>
               ) : (
-                <p className="mt-1 text-sm text-slate-400 italic">
+                <p className="mt-2 text-sm text-slate-400 italic">
                   Belum ada bio — lengkapi profilmu.
                 </p>
               )}
-              {workerProfile?.skills && (
-                <p className="mt-2 text-xs text-slate-500">
-                  <span className="font-medium text-slate-700">Keahlian:</span>{' '}
-                  {workerProfile.skills}
-                </p>
+
+              {/* Skills pills */}
+              {workerProfile?.skills?.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {workerProfile.skills.slice(0, 4).map((s) => (
+                    <span
+                      key={s}
+                      className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-600"
+                    >
+                      {s}
+                    </span>
+                  ))}
+                  {workerProfile.skills.length > 4 && (
+                    <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-400">
+                      +{workerProfile.skills.length - 4}
+                    </span>
+                  )}
+                </div>
               )}
+
+              {/* Aksi profil */}
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={() => navigate('/worker/profile')}
+                  className="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100"
+                >
+                  Lihat Profil
+                </button>
+                <button
+                  onClick={() => navigate('/worker/profile/edit')}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
+                >
+                  Edit Profil
+                </button>
+              </div>
             </div>
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="shrink-0 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
-            >
-              Ganti peran
-            </button>
           </div>
         </section>
 
@@ -201,6 +254,43 @@ export default function WorkerDashboard() {
             <StatCard label="Diterima" value={applicationSummary.accepted} accent="green" />
             <StatCard label="Ditolak" value={applicationSummary.rejected} accent="red" />
           </div>
+        </section>
+
+        {/* ── Pekerjaan Saya ── */}
+        <section>
+          <SectionHeader title="Pekerjaan Saya" />
+          <button
+            onClick={() => navigate('/worker/jobs')}
+            className="w-full rounded-2xl border border-slate-200 bg-white p-5 text-left transition hover:border-blue-300 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+          >
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-xl">
+                  💼
+                </div>
+                <div>
+                  <p className="font-semibold text-slate-900">
+                    Pekerjaan yang Diterima
+                  </p>
+                  <p className="mt-0.5 text-xs text-slate-500">
+                    {activeJobsCount > 0
+                      ? `${activeJobsCount} pekerjaan sedang aktif`
+                      : 'Belum ada pekerjaan aktif'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {activeJobsCount > 0 && (
+                  <span className="rounded-full bg-blue-600 px-2.5 py-0.5 text-xs font-bold text-white">
+                    {activeJobsCount}
+                  </span>
+                )}
+                <span className="text-sm text-blue-600 font-medium">
+                  Lihat →
+                </span>
+              </div>
+            </div>
+          </button>
         </section>
 
         {/* ── Daftar lamaran terbaru ── */}
