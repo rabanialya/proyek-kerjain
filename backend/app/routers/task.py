@@ -103,6 +103,52 @@ def get_task(
 
 
 # =========================================================
+# GET TASK BY OWNER (termasuk draft & closed)
+# =========================================================
+
+@router.get(
+    "/{task_id}/owner",
+    response_model=TaskResponse,
+)
+def get_task_as_owner(
+    task_id: UUID,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """
+    Employer mengambil detail task miliknya sendiri (semua status: draft, published, closed).
+    Digunakan oleh halaman Edit Task agar form bisa diisi data existing.
+    """
+    task = session.get(Task, task_id)
+
+    if not task:
+        raise HTTPException(
+            status_code=404,
+            detail="Task tidak ditemukan",
+        )
+
+    employer_profile = session.exec(
+        select(EmployerProfile).where(
+            EmployerProfile.user_id == current_user.id
+        )
+    ).first()
+
+    if not employer_profile:
+        raise HTTPException(
+            status_code=403,
+            detail="Anda belum memiliki Employer Profile",
+        )
+
+    if task.employer_id != employer_profile.id:
+        raise HTTPException(
+            status_code=403,
+            detail="Anda tidak memiliki akses ke task ini",
+        )
+
+    return task
+
+
+# =========================================================
 # CREATE TASK
 # =========================================================
 

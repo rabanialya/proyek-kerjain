@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useDashboardEmployer } from '../hooks/useDashboardEmployer'
+import { publishTask } from '../lib/api'
 
 // ─── Komponen kecil ────────────────────────────────────────────────────────
 
@@ -43,7 +44,7 @@ function StatusBadge({ status }) {
   )
 }
 
-function TaskRow({ task }) {
+function TaskRow({ task, onEdit, onPublish, publishing }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 transition hover:border-emerald-300 hover:shadow-sm">
       <div className="flex items-start justify-between gap-3">
@@ -60,6 +61,27 @@ function TaskRow({ task }) {
         </span>
         <span className="text-xs text-slate-400">· {task.payment_method}</span>
       </div>
+
+      {/* Aksi per task — hanya untuk draft dan published */}
+      {task.status !== 'closed' && (
+        <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
+          <button
+            onClick={() => onEdit(task.id)}
+            className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-200"
+          >
+            ✏️ Edit
+          </button>
+          {task.status === 'draft' && (
+            <button
+              onClick={() => onPublish(task)}
+              disabled={publishing === task.id}
+              className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {publishing === task.id ? 'Memproses…' : '🚀 Publikasikan'}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -87,6 +109,10 @@ export default function EmployerDashboard() {
     return () => clearTimeout(t)
   }, [flash])
 
+  // State untuk publish cepat dari dashboard
+  const [publishing, setPublishing] = useState(null)   // task.id yang sedang diproses
+  const [publishError, setPublishError] = useState(null)
+
   const {
     employerProfile,
     myTasks,
@@ -95,6 +121,27 @@ export default function EmployerDashboard() {
     error,
     reload,
   } = useDashboardEmployer()
+
+  // ── Navigasi ke halaman edit ──
+  function handleEdit(taskId) {
+    navigate(`/tasks/${taskId}/edit`)
+  }
+
+  // ── Publish langsung dari dashboard (untuk task draft) ──
+  async function handlePublish(task) {
+    if (publishing) return
+    setPublishing(task.id)
+    setPublishError(null)
+    try {
+      await publishTask(task.id)
+      setFlash(`Task "${task.title}" berhasil dipublikasikan.`)
+      reload()
+    } catch (err) {
+      setPublishError(err.message ?? 'Gagal mempublikasikan task.')
+    } finally {
+      setPublishing(null)
+    }
+  }
 
   // ── Loading state ──
   if (loading) {
@@ -155,21 +202,60 @@ export default function EmployerDashboard() {
           </div>
         )}
 
-        {/* ── Header kartu profil ── */}
+        {/* ── Kartu profil Employer ── */}
         <section className="rounded-2xl bg-white p-6 shadow-sm">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xl">🏢</span>
-                <span className="text-xs font-semibold uppercase tracking-widest text-emerald-600">
-                  Employer
-                </span>
+          <div className="flex items-start gap-4">
+            {/* Avatar inisial */}
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-xl font-bold text-white select-none">
+              {(employerProfile?.display_name ?? user?.full_name ?? '?')[0].toUpperCase()}
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-semibold uppercase tracking-widest text-emerald-600">
+                      Employer
+                    </span>
+                    {employerProfile?.tipe_employer && (
+                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">
+                        {employerProfile.tipe_employer}
+                      </span>
+                    )}
+                    {employerProfile?.is_verified && (
+                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700">
+                        ✓ Terverifikasi
+                      </span>
+                    )}
+                  </div>
+                  <h1 className="mt-0.5 text-lg font-bold text-slate-900 leading-tight">
+                    {employerProfile?.display_name ?? user?.full_name}
+                  </h1>
+                  {employerProfile?.sektor && (
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {employerProfile.sektor}
+                    </p>
+                  )}
+                  {employerProfile?.location && (
+                    <p className="text-xs text-slate-500">
+                      📍 {employerProfile.location}
+                    </p>
+                  )}
+                </div>
+                <button
+                  onClick={() => navigate('/dashboard')}
+                  className="shrink-0 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                >
+                  Ganti peran
+                </button>
               </div>
-              <h1 className="mt-2 text-xl font-bold text-slate-900">
-                {employerProfile?.display_name ?? user?.full_name}
-              </h1>
-              <p className="mt-0.5 text-sm text-slate-500">{user?.email}</p>
-              {employerProfile?.description ? (
+
+              {/* Tagline atau deskripsi */}
+              {employerProfile?.tagline ? (
+                <p className="mt-2 text-sm font-medium text-slate-600 italic">
+                  "{employerProfile.tagline}"
+                </p>
+              ) : employerProfile?.description ? (
                 <p className="mt-2 text-sm text-slate-500 line-clamp-2">
                   {employerProfile.description}
                 </p>
@@ -178,13 +264,23 @@ export default function EmployerDashboard() {
                   Belum ada deskripsi — lengkapi profilmu.
                 </p>
               )}
+
+              {/* Aksi profil */}
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={() => navigate('/employer/profile')}
+                  className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100"
+                >
+                  Lihat Profil
+                </button>
+                <button
+                  onClick={() => navigate('/employer/profile/edit')}
+                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
+                >
+                  Edit Profil
+                </button>
+              </div>
             </div>
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="shrink-0 rounded-xl border border-slate-200 px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-50"
-            >
-              Ganti peran
-            </button>
           </div>
         </section>
 
@@ -249,6 +345,22 @@ export default function EmployerDashboard() {
             }
           />
 
+          {/* Error publish inline */}
+          {publishError && (
+            <div
+              role="alert"
+              className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+            >
+              {publishError}
+              <button
+                onClick={() => setPublishError(null)}
+                className="ml-2 font-medium underline underline-offset-2 hover:no-underline"
+              >
+                Tutup
+              </button>
+            </div>
+          )}
+
           {myTasks.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-300 py-10 text-center">
               <p className="text-3xl">📝</p>
@@ -268,7 +380,13 @@ export default function EmployerDashboard() {
           ) : (
             <div className="space-y-3">
               {myTasks.map((task) => (
-                <TaskRow key={task.id} task={task} />
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  onEdit={handleEdit}
+                  onPublish={handlePublish}
+                  publishing={publishing}
+                />
               ))}
             </div>
           )}
