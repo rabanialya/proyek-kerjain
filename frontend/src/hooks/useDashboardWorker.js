@@ -1,0 +1,99 @@
+import { useCallback, useEffect, useState } from 'react'
+import {
+  fetchMyApplications,
+  fetchMyWorkerProfile,
+  fetchPublishedTasks,
+} from '../lib/api'
+
+/**
+ * Hook untuk mengambil semua data yang dibutuhkan WorkerDashboard.
+ *
+ * Data yang diambil:
+ * - workerProfile  → GET /profiles/worker
+ * - applications   → GET /applications/my
+ * - recentTasks    → GET /tasks (published, maks 5 terbaru, tanpa token)
+ *
+ * Catatan keterbatasan:
+ * - Tidak ada endpoint GET /tasks/applied-by-me yang menyertakan detail task.
+ *   applications hanya mengembalikan { task_id, status, ... } tanpa judul task.
+ *   Untuk menampilkan judul task di ringkasan lamaran, perlu cross-reference
+ *   dengan data tasks atau endpoint GET /tasks/:id per lamaran (belum diimplementasi).
+ * - recentTasks diambil dari endpoint publik — tidak memerlukan token.
+ */
+export function useDashboardWorker() {
+  const [workerProfile, setWorkerProfile] = useState(null)
+  const [applications, setApplications] = useState([])
+  const [recentTasks, setRecentTasks] = useState([])
+
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      // Panggil ketiga endpoint paralel — lebih cepat, dan kegagalan satu
+      // tidak memblokir yang lain.
+      const [profileResult, applicationsResult, tasksResult] =
+        await Promise.allSettled([
+          fetchMyWorkerProfile(),
+          fetchMyApplications(),
+          fetchPublishedTasks(),
+        ])
+
+      // Worker Profile
+      if (profileResult.status === 'fulfilled') {
+        setWorkerProfile(profileResult.value)
+      } else {
+        // Profile wajib ada (user sudah lewat setup), tapi tidak fatal.
+        console.warn('Gagal mengambil worker profile:', profileResult.reason)
+      }
+
+      // Applications — jika gagal, tampilkan empty state bukan error total.
+      if (applicationsResult.status === 'fulfilled') {
+        setApplications(applicationsResult.value ?? [])
+      } else {
+        console.warn('Gagal mengambil applications:', applicationsResult.reason)
+        setApplications([])
+      }
+
+      // Recent tasks — ambil 5 terbaru (sort by created_at desc).
+      if (tasksResult.status === 'fulfilled') {
+        const sorted = [...(tasksResult.value ?? [])].sort(
+          (a, b) => new Date(b.created_at) - new Date(a.created_at),
+        )
+        setRecentTasks(sorted.slice(0, 5))
+      } else {
+        console.warn('Gagal mengambil tasks:', tasksResult.reason)
+        setRecentTasks([])
+      }
+    } catch (err) {
+      setError(err.message ?? 'Gagal memuat data dashboard.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  // Ringkasan lamaran berdasarkan status
+  const applicationSummary = {
+    total: applications.length,
+    pending: applications.filter((a) => a.status === 'pending').length,
+    accepted: applications.filter((a) => a.status === 'accepted').length,
+    rejected: applications.filter((a) => a.status === 'rejected').length,
+  }
+
+  return {
+    workerProfile,
+    applications,
+    applicationSummary,
+    recentTasks,
+    loading,
+    error,
+    reload: load,
+  }
+}
