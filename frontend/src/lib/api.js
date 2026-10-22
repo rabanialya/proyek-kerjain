@@ -16,10 +16,21 @@ export async function apiRequest(path, options = {}) {
   const data = await response.json().catch(() => null)
 
   if (!response.ok) {
-    const message =
-      typeof data?.detail === 'string'
-        ? data.detail
-        : 'Terjadi kesalahan saat menghubungi server.'
+    let message = 'Terjadi kesalahan saat menghubungi server.'
+
+    if (typeof data?.detail === 'string') {
+      message = data.detail
+    } else if (Array.isArray(data?.detail)) {
+      // Pydantic validation error — detail berupa array of { loc, msg, type }
+      message = data.detail
+        .map((err) => {
+          const field = Array.isArray(err.loc)
+            ? err.loc.filter((s) => s !== 'body').join(' → ')
+            : String(err.loc ?? '')
+          return field ? `${field}: ${err.msg}` : err.msg
+        })
+        .join('; ')
+    }
 
     throw new Error(message)
   }
@@ -74,7 +85,11 @@ export async function fetchPublishedTasks() {
 }
 
 // POST /tasks — buat task baru (butuh Employer Profile).
-// body: { category_id, title, description, location, worker_needed, wage_amount, payment_method }
+// body: { category_id, title, description?, work_type?, location?,
+//         worker_needed, wage_amount, wage_rate?, payment_method,
+//         application_deadline?, work_date?, work_time_start?, work_time_end?,
+//         work_deadline_days?, required_skills?, requirements_flags?, requirements_note? }
+// Field baru semua opsional — task dapat disimpan sebagai draft tanpa mengisinya.
 export async function createTask(body) {
   return apiRequestAuth('/tasks', {
     method: 'POST',
@@ -147,11 +162,29 @@ export async function fetchMyAssignments() {
   return apiRequestAuth('/assignments/my')
 }
 
+// POST /assignments — buat assignment dari application yang sudah accepted.
+// body: { application_id }
+// Hanya Employer pemilik task yang boleh. Application harus berstatus accepted.
+// Melempar Error jika assignment sudah ada untuk application tersebut.
+export async function createAssignment(applicationId) {
+  return apiRequestAuth('/assignments', {
+    method: 'POST',
+    body: JSON.stringify({ application_id: applicationId }),
+  })
+}
+
 // GET /assignments/worker/my-jobs — pekerjaan Worker yang sedang login, diperkaya
 // dengan detail task, kategori, dan employer. Hanya assignment dari application accepted.
 // Response: WorkerJobResponse[]
 export async function fetchMyWorkerJobs() {
   return apiRequestAuth('/assignments/worker/my-jobs')
+}
+
+// GET /assignments/employer/my-jobs — semua assignment pada task milik Employer yang login,
+// diperkaya dengan detail task, kategori, dan worker.
+// Response: EmployerJobResponse[]
+export async function fetchEmployerJobs() {
+  return apiRequestAuth('/assignments/employer/my-jobs')
 }
 
 // GET /assignments/:id — detail satu assignment (worker atau employer pemilik).
@@ -212,6 +245,18 @@ export async function fetchWorkEvidences(assignmentId) {
   return apiRequestAuth(`/work-evidences/${assignmentId}`)
 }
 
+// POST /payments/settle/:assignmentId — buat WORK_PAYMENT + PLATFORM_FEE sekaligus.
+// Hanya bisa dipanggil setelah assignment berstatus 'approved'.
+// Employer pemilik task yang boleh memanggil ini.
+// method: saat ini hanya 'CASH' yang didukung.
+// Response: [PaymentResponse, PaymentResponse] (WORK_PAYMENT dan PLATFORM_FEE)
+export async function settleAssignmentPayment(assignmentId, method = 'CASH') {
+  return apiRequestAuth(`/payments/settle/${assignmentId}`, {
+    method: 'POST',
+    body: JSON.stringify({ method }),
+  })
+}
+
 // ─── Categories ────────────────────────────────────────────────────────────
 
 // GET /categories — semua kategori (digunakan saat membuat task).
@@ -249,11 +294,71 @@ export async function fetchMyTaskById(taskId) {
 }
 
 // PUT /tasks/:id — partial update task (hanya field yang dikirim yang diperbarui).
-// body: Partial<{ category_id, title, description, location, worker_needed, wage_amount, payment_method }>
+// body: Partial<{ category_id, title, description, work_type, location,
+//                 worker_needed, wage_amount, wage_rate, payment_method,
+//                 application_deadline, work_date, work_time_start, work_time_end,
+//                 work_deadline_days, required_skills, requirements_flags, requirements_note }>
 // Melempar Error jika task tidak ditemukan, bukan milik user, atau task sudah closed.
 export async function updateTask(taskId, body) {
   return apiRequestAuth(`/tasks/${taskId}`, {
     method: 'PUT',
     body: JSON.stringify(body),
   })
+}
+
+// ─── Payment (alur baru — transfer bank manual) ─────────────────────────────
+
+// POST /payments/settle/:assignmentId
+// Membuat WORK_PAYMENT + PLATFORM_FEE sekaligus.
+// Response: PaymentSettlementResponse {
+//   work_payment, platform_fee,
+//   worker_wage, platform_fee_amount, total_transfer,
+//   reference_code, platform_bank_info
+// }
+export async function settlePayment(assignmentId) {
+  return apiRequestAuth(`/payments/settle/${assignmentId}`, {
+    method: 'POST',
+    body: JSON.stringify({ method: 'BANK_TRANSFER' }),
+  })
+}
+
+// POST /payments/:paymentId/upload-proof — Employer upload bukti transfer.
+// file: File object
+// Response: PaymentUploadProofResponse { id, status, transfer_proof_url, message }
+export async function uploadTransferProof(paymentId, file) {
+  const token = getAuthToken()
+  if (!token) throw new Error('Tidak ada sesi aktif. Silakan login kembali.')
+
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await fetch(`${API_BASE_URL}/payments/${paymentId}/upload-proof`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  })
+
+  const data = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    const message =
+      typeof data?.detail === 'string'
+        ? data.detail
+        : 'Gagal mengunggah bukti transfer.'
+    throw new Error(message)
+  }
+
+  return data
+}
+
+// GET /payments/by-assignment/:assignmentId
+// Mengembalikan semua payment record untuk satu assignment.
+// Worker hanya mendapat WORK_PAYMENT; Employer mendapat keduanya.
+export async function fetchPaymentsByAssignment(assignmentId) {
+  return apiRequestAuth(`/payments/by-assignment/${assignmentId}`)
+}
+
+// GET /payments/:paymentId — detail satu payment record.
+export async function fetchPaymentById(paymentId) {
+  return apiRequestAuth(`/payments/${paymentId}`)
 }

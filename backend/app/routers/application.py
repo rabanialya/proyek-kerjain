@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -66,6 +67,20 @@ def create_application(
             status_code=400,
             detail="Task belum tersedia untuk dilamar",
         )
+
+    # Validasi: deadline pendaftaran tidak boleh sudah lewat
+    if task.application_deadline is not None:
+        now_utc = datetime.now(timezone.utc)
+        deadline = task.application_deadline
+        # Normalisasi ke UTC jika belum timezone-aware
+        if deadline.tzinfo is None:
+            deadline = deadline.replace(tzinfo=timezone.utc)
+        if now_utc > deadline:
+            raise HTTPException(
+                status_code=400,
+                detail="Pendaftaran untuk task ini sudah ditutup. "
+                       "Batas akhir pendaftaran telah terlampaui.",
+            )
 
     # Employer tidak boleh melamar task miliknya sendiri
     employer_profile = session.exec(

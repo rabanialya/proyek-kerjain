@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { fetchMyWorkerJobs, updateAssignmentStatus, uploadWorkEvidence, fetchWorkEvidences } from '../lib/api'
+import {
+  fetchMyWorkerJobs,
+  updateAssignmentStatus,
+  uploadWorkEvidence,
+  fetchWorkEvidences,
+  fetchPaymentsByAssignment,
+} from '../lib/api'
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -51,6 +57,12 @@ const STATUS_CONFIG = {
     cls: 'bg-red-50 text-red-700 border-red-200',
     dot: 'bg-red-500',
     description: 'Pekerjaan sedang dalam proses dispute dengan Employer.',
+  },
+  disputed_closed: {
+    label: 'Dispute Ditutup',
+    cls: 'bg-slate-50 text-slate-600 border-slate-200',
+    dot: 'bg-slate-400',
+    description: 'Dispute telah ditutup oleh Admin.',
   },
 }
 
@@ -349,6 +361,180 @@ function WorkEvidencePanel({ job, onEvidenceChange }) {
   )
 }
 
+// ─── Panel status pembayaran Worker (read-only) ──────────────────────────────
+//
+// Ditampilkan hanya jika assignment sudah approved.
+// Worker tidak dapat mengonfirmasi atau mengubah status pembayaran.
+
+const WORKER_PAYMENT_STATUS = {
+  pending: {
+    label: 'Tagihan Dibuat',
+    desc: 'Employer sedang menyiapkan pembayaran.',
+    cls: 'bg-yellow-50 text-yellow-700 border-yellow-200',
+    icon: '🕐',
+  },
+  awaiting_verification: {
+    label: 'Menunggu Verifikasi',
+    desc: 'Bukti transfer sedang diperiksa oleh Admin Kerjain.',
+    cls: 'bg-blue-50 text-blue-700 border-blue-200',
+    icon: '🔍',
+  },
+  verified: {
+    label: 'Dana Terverifikasi',
+    desc: 'Dana dari Employer sudah dikonfirmasi masuk ke platform. Pencairan sedang diproses.',
+    cls: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    icon: '✅',
+  },
+  rejected: {
+    label: 'Bukti Ditolak',
+    desc: 'Admin menolak bukti transfer Employer. Employer perlu mengirim ulang.',
+    cls: 'bg-red-50 text-red-700 border-red-200',
+    icon: '⚠️',
+  },
+  disbursed: {
+    label: 'Upah Sudah Dicairkan',
+    desc: 'Admin telah mencatat bahwa upah Anda sudah ditransfer.',
+    cls: 'bg-emerald-50 text-emerald-800 border-emerald-300',
+    icon: '💰',
+  },
+  confirmed: {
+    label: 'Terkonfirmasi',
+    desc: 'Pembayaran terkonfirmasi.',
+    cls: 'bg-slate-50 text-slate-600 border-slate-200',
+    icon: '✔️',
+  },
+}
+
+function WorkerPaymentPanel({ assignmentId, assignmentStatus }) {
+  const [payment, setPayment] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+
+  async function load() {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await fetchPaymentsByAssignment(assignmentId)
+      // Worker hanya mendapat WORK_PAYMENT
+      const wp = Array.isArray(data) ? data.find((p) => p.type === 'WORK_PAYMENT') : null
+      setPayment(wp ?? null)
+    } catch (err) {
+      // 404 atau belum ada payment — bukan error kritis
+      if (!err.message?.includes('404')) {
+        setError(err.message ?? 'Gagal memuat status pembayaran.')
+      }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (assignmentStatus === 'approved' || assignmentStatus === 'disputed_closed') {
+      load()
+    } else {
+      setLoading(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assignmentId, assignmentStatus])
+
+  // Jangan tampilkan jika belum approved
+  if (!['approved', 'disputed_closed'].includes(assignmentStatus)) return null
+
+  // disputed_closed — tampilkan info khusus
+  if (assignmentStatus === 'disputed_closed') {
+    return (
+      <section className="rounded-2xl bg-white p-6 shadow-sm">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-slate-400">
+          Status Pembayaran
+        </h2>
+        <div className="rounded-xl bg-slate-50 border border-slate-200 px-4 py-3 text-sm text-slate-700">
+          <p className="font-semibold">Dispute Ditutup</p>
+          <p className="mt-1 text-xs text-slate-500">
+            Dispute pada pekerjaan ini telah ditutup oleh Admin. Pembayaran tidak diproses.
+            Hubungi Admin Kerjain jika ada pertanyaan.
+          </p>
+        </div>
+      </section>
+    )
+  }
+
+  return (
+    <section className="rounded-2xl bg-white p-6 shadow-sm">
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-slate-400">
+        Status Pembayaran
+      </h2>
+
+      {loading ? (
+        <div className="space-y-2">
+          <div className="h-14 animate-pulse rounded-xl bg-slate-100" />
+        </div>
+      ) : error ? (
+        <p className="text-sm text-red-500">{error}</p>
+      ) : !payment ? (
+        <div className="rounded-xl bg-yellow-50 border border-yellow-200 px-4 py-3 text-sm text-yellow-700">
+          <p className="font-semibold">🕐 Menunggu Employer</p>
+          <p className="mt-1 text-xs">
+            Pekerjaan telah disetujui. Employer belum membuat tagihan pembayaran.
+            Pembayaran akan diproses setelah Employer mentransfer ke rekening platform.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {/* Status utama */}
+          {(() => {
+            const cfg = WORKER_PAYMENT_STATUS[payment.status] ?? {
+              label: payment.status,
+              desc: '',
+              cls: 'bg-slate-50 text-slate-600 border-slate-200',
+              icon: '•',
+            }
+            return (
+              <div className={`flex items-start gap-3 rounded-xl border px-4 py-3 ${cfg.cls}`}>
+                <span className="text-lg shrink-0">{cfg.icon}</span>
+                <div>
+                  <p className="font-semibold text-sm">{cfg.label}</p>
+                  {cfg.desc && (
+                    <p className="mt-0.5 text-xs opacity-80">{cfg.desc}</p>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
+
+          {/* Info upah */}
+          <div className="flex items-center justify-between rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+            <span className="text-sm text-slate-500">Upah Anda</span>
+            <span className="text-sm font-bold text-slate-800">
+              {`Rp ${Number(payment.amount).toLocaleString('id-ID')}`}
+            </span>
+          </div>
+
+          {/* Waktu pencairan jika sudah disbursed */}
+          {payment.status === 'disbursed' && payment.paid_at && (
+            <p className="text-xs text-slate-400 text-center">
+              Dicairkan pada{' '}
+              {new Date(payment.paid_at).toLocaleDateString('id-ID', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
+            </p>
+          )}
+
+          {/* Catatan: Worker tidak bisa konfirmasi pembayaran */}
+          {payment.status !== 'disbursed' && (
+            <p className="text-xs text-slate-400 text-center">
+              Konfirmasi pembayaran dilakukan oleh Admin setelah verifikasi dana masuk.
+            </p>
+          )}
+        </div>
+      )}
+    </section>
+  )
+}
+
 // ─── Panel aksi status ──────────────────────────────────────────────────────
 //
 // Worker hanya dapat mengubah status ke in_progress (dari assigned)
@@ -382,7 +568,7 @@ function ActionPanel({ job, onStatusUpdate, evidenceCount }) {
   const { assignment_status: status } = job
 
   // Tidak ada aksi untuk status terminal
-  if (status === 'submitted' || status === 'approved' || status === 'disputed') {
+  if (status === 'submitted' || status === 'approved' || status === 'disputed' || status === 'disputed_closed') {
     return null
   }
 
@@ -634,6 +820,12 @@ export default function JobDetailPage() {
         <WorkEvidencePanel
           job={job}
           onEvidenceChange={setEvidenceCount}
+        />
+
+        {/* Panel status pembayaran — hanya setelah approved */}
+        <WorkerPaymentPanel
+          assignmentId={job.assignment_id}
+          assignmentStatus={job.assignment_status}
         />
 
         {/* Panel aksi — hanya tampil jika ada aksi yang tersedia */}

@@ -100,6 +100,8 @@ class WorkerProfileCreate(BaseModel):
     @classmethod
     def validate_preferensi_shift(cls, v: list[str] | None) -> list[str] | None:
         if v is not None:
+            # Normalize ke lowercase sebelum validasi
+            v = [x.lower() for x in v]
             invalid = set(v) - VALID_PREFERENSI_SHIFT
             if invalid:
                 raise ValueError(
@@ -123,6 +125,8 @@ class WorkerProfileCreate(BaseModel):
     @classmethod
     def validate_payment_methods(cls, v: list[str] | None) -> list[str] | None:
         if v is not None:
+            # Normalize ke lowercase sebelum validasi
+            v = [x.lower() for x in v]
             invalid = set(v) - VALID_PAYMENT_METHODS
             if invalid:
                 raise ValueError(

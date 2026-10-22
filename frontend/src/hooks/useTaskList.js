@@ -79,7 +79,7 @@ export function useTaskList() {
     if (locationFilter.trim()) {
       const loc = locationFilter.trim().toLowerCase()
       result = result.filter((t) =>
-        t.location.toLowerCase().includes(loc),
+        (t.location ?? '').toLowerCase().includes(loc),
       )
     }
 
@@ -98,6 +98,7 @@ export function useTaskList() {
   }, [categories])
 
   // Daftar lokasi unik dari semua tasks — untuk dropdown filter
+  // location bisa null (task Remote) — filter sebelum masuk Set
   const uniqueLocations = useMemo(() => {
     const set = new Set(tasks.map((t) => t.location).filter(Boolean))
     return [...set].sort()

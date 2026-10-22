@@ -14,42 +14,75 @@ function SkeletonCard() {
   )
 }
 
+const WORK_TYPE_BADGE = {
+  remote:  { label: 'Remote',  cls: 'bg-emerald-50 text-emerald-700' },
+  on_site: { label: 'On-site', cls: 'bg-blue-50 text-blue-700' },
+  hybrid:  { label: 'Hybrid',  cls: 'bg-purple-50 text-purple-700' },
+}
+
 function TaskCard({ task, categoryName, onClick }) {
+  const workBadge = task.work_type ? WORK_TYPE_BADGE[task.work_type] : null
+  const wageRateLabel = {
+    project: '/ proyek', hourly: '/ jam', daily: '/ hari', per_output: '/ output',
+  }[task.wage_rate] ?? ''
+
   return (
     <button
       onClick={onClick}
       className="w-full rounded-2xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-blue-400 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-300"
     >
       <div className="flex items-start justify-between gap-3">
-        <h3 className="font-semibold text-slate-900 leading-snug">
-          {task.title}
-        </h3>
-        <span className="shrink-0 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-600">
-          Published
-        </span>
+        <h3 className="font-semibold text-slate-900 leading-snug">{task.title}</h3>
+        <div className="flex flex-wrap gap-1.5 shrink-0">
+          <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-600">
+            Published
+          </span>
+          {workBadge && (
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${workBadge.cls}`}>
+              {workBadge.label}
+            </span>
+          )}
+        </div>
       </div>
 
       {categoryName && (
         <p className="mt-1 text-xs font-medium text-slate-400">{categoryName}</p>
       )}
 
-      <p className="mt-1 text-sm text-slate-500">📍 {task.location}</p>
+      {task.location && (
+        <p className="mt-1 text-sm text-slate-500">📍 {task.location}</p>
+      )}
 
       {task.description && (
-        <p className="mt-2 text-sm text-slate-500 line-clamp-2">
-          {task.description}
-        </p>
+        <p className="mt-2 text-sm text-slate-500 line-clamp-2">{task.description}</p>
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1">
         <p className="text-sm font-bold text-slate-800">
           Rp {Number(task.wage_amount).toLocaleString('id-ID')}
+          {wageRateLabel && (
+            <span className="ml-1 text-xs font-normal text-slate-400">{wageRateLabel}</span>
+          )}
         </p>
         <span className="text-xs text-slate-400">· {task.payment_method}</span>
         <span className="text-xs text-slate-400">
           · {task.worker_needed} pekerja dibutuhkan
         </span>
       </div>
+
+      {/* Deadline pendaftaran — peringatan ringkas */}
+      {task.application_deadline && (
+        <p className={`mt-2 text-xs font-medium ${
+          new Date(task.application_deadline) <= new Date()
+            ? 'text-red-500'
+            : 'text-amber-600'
+        }`}>
+          {new Date(task.application_deadline) <= new Date()
+            ? '🔒 Pendaftaran ditutup'
+            : `⏰ Daftar sebelum ${new Date(task.application_deadline).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}`
+          }
+        </p>
+      )}
     </button>
   )
 }

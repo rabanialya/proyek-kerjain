@@ -1,10 +1,15 @@
+import logging
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.openapi.utils import get_openapi
 from fastapi import Depends, HTTPException, status
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+
+logger = logging.getLogger(__name__)
 
 from app.routers.auth import router as auth_router
 from app.routers.profiles import router as profiles_router
@@ -24,6 +29,14 @@ from app.routers.activity_log import router as activity_log_router
 from app.routers.admin import router as admin_router
 
 app = FastAPI()
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    logger.error("422 Validation Error on %s %s: %s", request.method, request.url.path, exc.errors())
+    return JSONResponse(
+        status_code=422,
+        content={"detail": exc.errors()},
+    )
 
 # ── Static file serving untuk uploads ──────────────────────────────────────
 # File disimpan di backend/uploads/work-evidence/
