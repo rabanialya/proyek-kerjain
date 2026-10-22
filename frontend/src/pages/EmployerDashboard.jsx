@@ -306,6 +306,25 @@ export default function EmployerDashboard() {
           </button>
         </section>
 
+        {/* ── CTA pekerjaan aktif ── */}
+        <button
+          onClick={() => navigate('/employer/jobs')}
+          className="w-full rounded-2xl border-2 border-blue-200 bg-blue-50 px-5 py-4 text-left transition hover:border-blue-400 hover:bg-blue-100"
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xl">🔍</p>
+              <p className="mt-1 font-semibold text-blue-900">Pekerjaan Aktif</p>
+              <p className="mt-0.5 text-xs text-blue-600">
+                Tinjau bukti kerja dan setujui hasil pekerjaan Worker
+              </p>
+            </div>
+            <span className="shrink-0 rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+              Lihat →
+            </span>
+          </div>
+        </button>
+
         {/* ── Ringkasan tugas ── */}
         <section>
           <SectionHeader title="Ringkasan tugas" />

@@ -21,6 +21,8 @@ import CreateTaskPage from './pages/CreateTaskPage'
 import EditTaskPage from './pages/EditTaskPage'
 import MyJobsPage from './pages/MyJobsPage'
 import JobDetailPage from './pages/JobDetailPage'
+import EmployerJobsPage from './pages/EmployerJobsPage'
+import EmployerJobDetailPage from './pages/EmployerJobDetailPage'
 
 /**
  * Routing struktur:
@@ -42,6 +44,8 @@ import JobDetailPage from './pages/JobDetailPage'
  * /tasks/:taskId      → TaskDetailPage (detail satu tugas)
  * /worker/jobs        → MyJobsPage     (pekerjaan yang diterima, worker only)
  * /worker/jobs/:assignmentId → JobDetailPage (detail satu pekerjaan)
+ * /employer/jobs       → EmployerJobsPage     (pekerjaan aktif employer)
+ * /employer/jobs/:assignmentId → EmployerJobDetailPage (review bukti & approve)
  *
  * /                   → redirect ke /dashboard
  * *                   → redirect ke /dashboard (fallback)
@@ -74,6 +78,8 @@ function App() {
             <Route path="/tasks/:taskId" element={<TaskDetailPage />} />
             <Route path="/worker/jobs" element={<MyJobsPage />} />
             <Route path="/worker/jobs/:assignmentId" element={<JobDetailPage />} />
+            <Route path="/employer/jobs" element={<EmployerJobsPage />} />
+            <Route path="/employer/jobs/:assignmentId" element={<EmployerJobDetailPage />} />
           </Route>
 
           {/* Fallback */}

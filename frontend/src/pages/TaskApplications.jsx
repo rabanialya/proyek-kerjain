@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { fetchApplicationsByTask, fetchMyTasks, updateApplicationStatus } from '../lib/api'
+import { fetchApplicationsByTask, fetchMyTasks, updateApplicationStatus, fetchMyAssignments, createAssignment } from '../lib/api'
 
 // ─── Komponen kecil ────────────────────────────────────────────────────────
 
@@ -67,10 +67,14 @@ function ConfirmDialog({ isOpen, action, workerName, onConfirm, onCancel, loadin
 
 // ─── Kartu pelamar ─────────────────────────────────────────────────────────
 
-function ApplicantCard({ application, workerSlotFull, onAction }) {
+function ApplicantCard({ application, workerSlotFull, onAction, hasAssignment, onAssign, assignLoading, onViewProgress }) {
   const { worker, status } = application
   const isPending = status === 'pending'
+  const isAccepted = status === 'accepted'
   const canAccept = isPending && !workerSlotFull
+  // hasAssignment bisa berupa assignmentId (string) atau false/undefined
+  const assignmentId = typeof hasAssignment === 'string' ? hasAssignment : null
+  const isAssigned = !!assignmentId
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 transition hover:border-slate-300">
@@ -158,6 +162,36 @@ function ApplicantCard({ application, workerSlotFull, onAction }) {
           Kuota worker sudah terpenuhi — hanya penolakan yang tersedia
         </p>
       )}
+
+      {/* Panel assignment — hanya untuk lamaran accepted */}
+      {isAccepted && (
+        <div className="mt-3 border-t border-slate-100 pt-3">
+          {isAssigned ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2.5">
+                <span className="text-emerald-600">✓</span>
+                <p className="text-xs font-semibold text-emerald-700">
+                  Sudah ditugaskan
+                </p>
+              </div>
+              <button
+                onClick={() => onViewProgress(assignmentId)}
+                className="w-full rounded-xl bg-blue-600 py-2.5 text-xs font-semibold text-white hover:bg-blue-700 transition"
+              >
+                🔍 Lihat Progress & Tinjau Hasil
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => onAssign(application)}
+              disabled={assignLoading === application.id}
+              className="w-full rounded-xl bg-blue-600 py-2.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 transition"
+            >
+              {assignLoading === application.id ? 'Memproses...' : '📋 Tugaskan Worker Ini'}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -173,6 +207,9 @@ export default function TaskApplications() {
   const [loading, setLoading]         = useState(true)
   const [error, setError]             = useState(null)
 
+  // Map application_id → assignment_id untuk yang sudah punya assignment
+  const [assignedAppMap, setAssignedAppMap] = useState(new Map())
+
   // State dialog konfirmasi
   const [dialog, setDialog] = useState({
     open: false,
@@ -182,14 +219,21 @@ export default function TaskApplications() {
   const [actionLoading, setActionLoading] = useState(false)
   const [actionError, setActionError]     = useState(null)
 
+  // State untuk aksi tugaskan
+  // Menyimpan application.id yang sedang diproses (string | null)
+  const [assignLoading, setAssignLoading] = useState(null)
+  const [assignError, setAssignError]     = useState(null)
+  const [assignSuccess, setAssignSuccess] = useState(null)
+
   // ── Load data ──
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [tasksData, appsData] = await Promise.all([
+      const [tasksData, appsData, assignmentsData] = await Promise.all([
         fetchMyTasks(),
         fetchApplicationsByTask(taskId),
+        fetchMyAssignments(),
       ])
       const found = (tasksData ?? []).find((t) => t.id === taskId)
       if (!found) {
@@ -197,6 +241,11 @@ export default function TaskApplications() {
       } else {
         setTask(found)
         setApplications(appsData ?? [])
+        // Bangun Map application_id → assignment_id untuk yang sudah punya assignment
+        const map = new Map(
+          (assignmentsData ?? []).map((a) => [String(a.application_id), String(a.id)])
+        )
+        setAssignedAppMap(map)
       }
     } catch (err) {
       setError(err.message ?? 'Gagal memuat data lamaran.')
@@ -225,7 +274,7 @@ export default function TaskApplications() {
     setActionError(null)
   }
 
-  // ── Eksekusi aksi ──
+  // ── Eksekusi aksi accept/reject ──
   const handleConfirm = async () => {
     if (!dialog.application || !dialog.action) return
     setActionLoading(true)
@@ -246,6 +295,30 @@ export default function TaskApplications() {
     } finally {
       setActionLoading(false)
     }
+  }
+
+  // ── Buat assignment dari lamaran accepted ──
+  const handleAssign = async (application) => {
+    setAssignLoading(application.id)
+    setAssignError(null)
+    setAssignSuccess(null)
+    try {
+      await createAssignment(application.id)
+      // Reload data agar mendapat assignment_id yang sesungguhnya
+      await load()
+      setAssignSuccess(
+        `${application.worker?.full_name ?? 'Worker'} berhasil ditugaskan.`
+      )
+    } catch (err) {
+      setAssignError(err.message ?? 'Gagal membuat penugasan.')
+    } finally {
+      setAssignLoading(null)
+    }
+  }
+
+  // ── Navigasi ke halaman review progress ──
+  const handleViewProgress = (assignmentId) => {
+    navigate(`/employer/jobs/${assignmentId}`)
   }
 
   // ── Loading ──
@@ -342,10 +415,22 @@ export default function TaskApplications() {
             )}
           </section>
 
-          {/* ── Error aksi ── */}
+          {/* ── Error aksi accept/reject ── */}
           {actionError && (
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               ⚠ {actionError}
+            </div>
+          )}
+
+          {/* ── Error / sukses aksi assign ── */}
+          {assignError && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              ⚠ {assignError}
+            </div>
+          )}
+          {assignSuccess && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+              ✓ {assignSuccess}
             </div>
           )}
 
@@ -376,6 +461,10 @@ export default function TaskApplications() {
                         application={app}
                         workerSlotFull={workerSlotFull}
                         onAction={openDialog}
+                        hasAssignment={assignedAppMap.get(String(app.id)) ?? null}
+                        onAssign={handleAssign}
+                        assignLoading={assignLoading}
+                        onViewProgress={handleViewProgress}
                       />
                     ))}
                   </div>
@@ -395,6 +484,10 @@ export default function TaskApplications() {
                         application={app}
                         workerSlotFull={workerSlotFull}
                         onAction={openDialog}
+                        hasAssignment={assignedAppMap.get(String(app.id)) ?? null}
+                        onAssign={handleAssign}
+                        assignLoading={assignLoading}
+                        onViewProgress={handleViewProgress}
                       />
                     ))}
                   </div>
@@ -414,6 +507,10 @@ export default function TaskApplications() {
                         application={app}
                         workerSlotFull={workerSlotFull}
                         onAction={openDialog}
+                        hasAssignment={assignedAppMap.get(String(app.id)) ?? null}
+                        onAssign={handleAssign}
+                        assignLoading={assignLoading}
+                        onViewProgress={handleViewProgress}
                       />
                     ))}
                   </div>
