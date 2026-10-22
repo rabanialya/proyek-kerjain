@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -16,6 +16,7 @@ from app.schemas.assignment import (
     AssignmentResponse,
     AssignmentStatusUpdate,
     WorkerJobResponse,
+    EmployerJobResponse,
 )
 
 from app.utils.dependencies import get_current_user, get_session
@@ -105,8 +106,16 @@ def create_assignment(
 
     assignment = Assignment(
         application_id=data.application_id,
-        status="assigned"
+        status="assigned",
     )
+
+    # Hitung deadline aktual dari work_deadline_days task.
+    # Disalin ke assignment saat dibuat — tidak berubah jika task diubah kemudian.
+    if task.work_deadline_days is not None:
+        now_utc = datetime.now(timezone.utc)
+        assignment.deadline_at = now_utc + timedelta(days=task.work_deadline_days)
+    else:
+        assignment.deadline_at = None
 
     session.add(assignment)
     session.commit()
@@ -305,6 +314,7 @@ def get_worker_my_jobs(
                 submitted_at=assignment.submitted_at,
                 approved_at=assignment.approved_at,
                 completed_at=assignment.completed_at,
+                deadline_at=assignment.deadline_at,
                 application_id=application.id,
                 applied_at=application.applied_at,
                 task_id=task.id,
@@ -313,7 +323,19 @@ def get_worker_my_jobs(
                 task_location=task.location,
                 task_status=task.status,
                 wage_amount=task.wage_amount,
+                wage_rate=task.wage_rate,
                 payment_method=task.payment_method,
+                work_type=task.work_type,
+                work_date=task.work_date,
+                work_time_start=(
+                    task.work_time_start.strftime("%H:%M")
+                    if task.work_time_start else None
+                ),
+                work_time_end=(
+                    task.work_time_end.strftime("%H:%M")
+                    if task.work_time_end else None
+                ),
+                work_deadline_days=task.work_deadline_days,
                 category_id=task.category_id,
                 category_name=category.name if category else None,
                 employer_display_name=employer_display,
@@ -322,6 +344,164 @@ def get_worker_my_jobs(
 
     # Urutkan: yang paling baru dibuat terlebih dahulu
     result.sort(key=lambda r: r.assignment_created_at, reverse=True)
+
+    return result
+
+
+# =========================================================
+# GET EMPLOYER MY-JOBS  (enriched, employer-only)
+# =========================================================
+
+@router.get(
+    "/employer/my-jobs",
+    response_model=list[EmployerJobResponse],
+    summary="Pekerjaan Aktif (Employer) — dengan detail task & worker",
+)
+def get_employer_my_jobs(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """
+    Mengembalikan semua assignment pada task milik employer yang sedang login,
+    diperkaya dengan informasi task, kategori, dan worker.
+
+    Otorisasi: employer hanya dapat melihat assignment dari task miliknya sendiri
+    (difilter berdasarkan employer_profile.user_id == current_user.id).
+    """
+    # 1. Pastikan user punya Employer Profile
+    employer_profile = session.exec(
+        select(EmployerProfile).where(
+            EmployerProfile.user_id == current_user.id
+        )
+    ).first()
+
+    if not employer_profile:
+        raise HTTPException(
+            status_code=403,
+            detail="Anda belum memiliki Employer Profile",
+        )
+
+    # 2. Ambil semua task milik employer ini
+    employer_tasks = session.exec(
+        select(Task).where(
+            Task.employer_id == employer_profile.id
+        )
+    ).all()
+
+    if not employer_tasks:
+        return []
+
+    task_map = {t.id: t for t in employer_tasks}
+
+    # 3. Ambil semua application yang task_id-nya milik employer ini
+    employer_applications = session.exec(
+        select(Application).where(
+            Application.task_id.in_(list(task_map.keys()))
+        )
+    ).all()
+
+    if not employer_applications:
+        return []
+
+    app_map = {app.id: app for app in employer_applications}
+
+    # 4. Ambil semua assignment yang terhubung ke application tersebut
+    assignments = session.exec(
+        select(Assignment).where(
+            Assignment.application_id.in_(list(app_map.keys()))
+        )
+    ).all()
+
+    if not assignments:
+        return []
+
+    # 5. Enrich setiap assignment dengan task, kategori, dan worker
+    result: list[EmployerJobResponse] = []
+
+    for assignment in assignments:
+        application = app_map.get(assignment.application_id)
+        if not application:
+            continue
+
+        task = task_map.get(application.task_id)
+        if not task:
+            continue
+
+        # Kategori
+        category = session.get(Category, task.category_id)
+
+        # Worker Profile
+        worker_profile = session.exec(
+            select(WorkerProfile).where(
+                WorkerProfile.id == application.worker_id
+            )
+        ).first()
+
+        # User data Worker (untuk nama & kontak)
+        worker_user: User | None = None
+        worker_display = "Worker tidak ditemukan"
+        worker_email: str | None = None
+        worker_phone: str | None = None
+        worker_rating: float = 0.0
+
+        if worker_profile:
+            worker_user = session.get(User, worker_profile.user_id)
+            worker_display = (
+                worker_profile.nickname
+                or (worker_user.full_name if worker_user else "Worker")
+            )
+            worker_email = worker_user.email if worker_user else None
+            worker_phone = worker_user.phone if worker_user else None
+            worker_rating = worker_profile.rating_avg
+
+        result.append(
+            EmployerJobResponse(
+                assignment_id=assignment.id,
+                assignment_status=assignment.status,
+                assignment_created_at=assignment.created_at,
+                started_at=assignment.started_at,
+                submitted_at=assignment.submitted_at,
+                approved_at=assignment.approved_at,
+                completed_at=assignment.completed_at,
+                deadline_at=assignment.deadline_at,
+                application_id=application.id,
+                applied_at=application.applied_at,
+                task_id=task.id,
+                task_title=task.title,
+                task_description=task.description,
+                task_location=task.location,
+                task_status=task.status,
+                wage_amount=task.wage_amount,
+                wage_rate=task.wage_rate,
+                payment_method=task.payment_method,
+                work_type=task.work_type,
+                work_date=task.work_date,
+                work_time_start=(
+                    task.work_time_start.strftime("%H:%M")
+                    if task.work_time_start else None
+                ),
+                work_time_end=(
+                    task.work_time_end.strftime("%H:%M")
+                    if task.work_time_end else None
+                ),
+                work_deadline_days=task.work_deadline_days,
+                category_id=task.category_id,
+                category_name=category.name if category else None,
+                worker_display_name=worker_display,
+                worker_email=worker_email,
+                worker_phone=worker_phone,
+                worker_rating_avg=worker_rating,
+            )
+        )
+
+    # Urutkan: submitted dulu, lalu in_progress, lalu yang lain; dalam grup: terbaru duluan
+    STATUS_ORDER = {"submitted": 0, "in_progress": 1, "assigned": 2, "approved": 3, "disputed": 4}
+    result.sort(
+        key=lambda r: (
+            STATUS_ORDER.get(r.assignment_status, 99),
+            -(r.assignment_created_at.timestamp()),
+        )
+    )
 
     return result
 
