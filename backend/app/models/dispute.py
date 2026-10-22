@@ -27,6 +27,10 @@ class Dispute(SQLModel, table=True):
 
     status: str = Field(default="open")
 
+    # Keputusan terstruktur Admin: approve_work | reject_work | needs_revision
+    # NULL selama dispute belum diselesaikan.
+    decision: str | None = None
+
     resolution: str | None = None
 
     resolved_by: UUID | None = Field(

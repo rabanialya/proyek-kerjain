@@ -14,7 +14,6 @@ from app.models.employer_profile import EmployerProfile
 
 from app.schemas.dispute import (
     DisputeCreate,
-    DisputeResolve,
     DisputeResponse,
 )
 
@@ -32,6 +31,10 @@ router = APIRouter(
 
 # =========================================================
 # CREATE DISPUTE
+# Kebijakan:
+#   - Hanya Employer pemilik task yang dapat mengajukan dispute.
+#   - Assignment harus berstatus "submitted".
+#   - Tidak boleh ada dispute "open" yang sudah ada untuk assignment tsb.
 # =========================================================
 
 @router.post(
@@ -44,14 +47,11 @@ def create_dispute(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    # -----------------------------------------------------
+    # ---------------------------------------------------------
     # Cari assignment
-    # -----------------------------------------------------
+    # ---------------------------------------------------------
 
-    assignment = session.get(
-        Assignment,
-        dispute_data.assignment_id
-    )
+    assignment = session.get(Assignment, dispute_data.assignment_id)
 
     if not assignment:
         raise HTTPException(
@@ -59,91 +59,50 @@ def create_dispute(
             detail="Assignment tidak ditemukan"
         )
 
-    # -----------------------------------------------------
-    # Dispute hanya dapat dibuat sebelum assignment approved
-    # -----------------------------------------------------
+    # ---------------------------------------------------------
+    # Dispute hanya dapat dibuat dari status "submitted"
+    # ---------------------------------------------------------
 
-    if assignment.status in {"approved", "disputed"}:
+    if assignment.status != "submitted":
         raise HTTPException(
             status_code=400,
-            detail="Assignment tidak dapat dibuat dispute pada status saat ini"
+            detail=(
+                "Dispute hanya dapat diajukan ketika assignment berstatus 'submitted'. "
+                f"Status saat ini: '{assignment.status}'"
+            )
         )
 
-    # -----------------------------------------------------
-    # Cari application
-    # -----------------------------------------------------
+    # ---------------------------------------------------------
+    # Cari application → task
+    # ---------------------------------------------------------
 
-    application = session.get(
-        Application,
-        assignment.application_id
-    )
-
+    application = session.get(Application, assignment.application_id)
     if not application:
-        raise HTTPException(
-            status_code=404,
-            detail="Application tidak ditemukan"
-        )
+        raise HTTPException(status_code=404, detail="Application tidak ditemukan")
 
-    # -----------------------------------------------------
-    # Cari task
-    # -----------------------------------------------------
-
-    task = session.get(
-        Task,
-        application.task_id
-    )
-
+    task = session.get(Task, application.task_id)
     if not task:
-        raise HTTPException(
-            status_code=404,
-            detail="Task tidak ditemukan"
+        raise HTTPException(status_code=404, detail="Task tidak ditemukan")
+
+    # ---------------------------------------------------------
+    # Hanya Employer pemilik task yang boleh mengajukan dispute
+    # ---------------------------------------------------------
+
+    employer_profile = session.exec(
+        select(EmployerProfile).where(
+            EmployerProfile.user_id == current_user.id
         )
+    ).first()
 
-    # -----------------------------------------------------
-    # Cari Worker Profile
-    # -----------------------------------------------------
-
-    worker_profile = session.get(
-        WorkerProfile,
-        application.worker_id
-    )
-
-    # -----------------------------------------------------
-    # Cari Employer Profile
-    # -----------------------------------------------------
-
-    employer_profile = session.get(
-        EmployerProfile,
-        task.employer_id
-    )
-
-    if not worker_profile or not employer_profile:
-        raise HTTPException(
-            status_code=404,
-            detail="Profile terkait assignment tidak ditemukan"
-        )
-
-    # -----------------------------------------------------
-    # Cek apakah user terlibat dalam assignment
-    # -----------------------------------------------------
-
-    is_worker = (
-        current_user.id == worker_profile.user_id
-    )
-
-    is_employer = (
-        current_user.id == employer_profile.user_id
-    )
-
-    if not is_worker and not is_employer:
+    if not employer_profile or task.employer_id != employer_profile.id:
         raise HTTPException(
             status_code=403,
-            detail="Anda tidak terlibat dalam assignment ini"
+            detail="Hanya Employer pemilik task yang dapat mengajukan dispute"
         )
 
-    # -----------------------------------------------------
-    # Cek dispute yang masih open
-    # -----------------------------------------------------
+    # ---------------------------------------------------------
+    # Cek dispute yang masih open untuk assignment ini
+    # ---------------------------------------------------------
 
     existing_dispute = session.exec(
         select(Dispute).where(
@@ -158,9 +117,9 @@ def create_dispute(
             detail="Assignment ini sudah memiliki dispute yang masih terbuka"
         )
 
-    # -----------------------------------------------------
+    # ---------------------------------------------------------
     # Buat dispute
-    # -----------------------------------------------------
+    # ---------------------------------------------------------
 
     dispute = Dispute(
         assignment_id=assignment.id,
@@ -172,13 +131,13 @@ def create_dispute(
 
     session.add(dispute)
 
-    # -----------------------------------------------------
-    # Assignment menjadi disputed
-    # -----------------------------------------------------
+    # ---------------------------------------------------------
+    # Assignment → "disputed"
+    # Pembayaran dan pencairan diblokir selama status ini.
+    # ---------------------------------------------------------
 
     assignment.status = "disputed"
     assignment.updated_at = datetime.now(timezone.utc)
-
     session.add(assignment)
 
     session.commit()
@@ -188,7 +147,7 @@ def create_dispute(
 
 
 # =========================================================
-# GET MY DISPUTES
+# GET MY DISPUTES  (Employer yang mengajukan)
 # =========================================================
 
 @router.get(
@@ -210,6 +169,7 @@ def get_my_disputes(
 
 # =========================================================
 # GET DISPUTE DETAIL
+# Dapat diakses oleh Employer pemilik task atau Worker terkait.
 # =========================================================
 
 @router.get(
@@ -221,75 +181,45 @@ def get_dispute(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    dispute = session.get(
-        Dispute,
-        dispute_id
-    )
-
+    dispute = session.get(Dispute, dispute_id)
     if not dispute:
-        raise HTTPException(
-            status_code=404,
-            detail="Dispute tidak ditemukan"
-        )
+        raise HTTPException(status_code=404, detail="Dispute tidak ditemukan")
 
-    assignment = session.get(
-        Assignment,
-        dispute.assignment_id
-    )
-
+    assignment = session.get(Assignment, dispute.assignment_id)
     if not assignment:
-        raise HTTPException(
-            status_code=404,
-            detail="Assignment tidak ditemukan"
-        )
+        raise HTTPException(status_code=404, detail="Assignment tidak ditemukan")
 
-    application = session.get(
-        Application,
-        assignment.application_id
-    )
-
+    application = session.get(Application, assignment.application_id)
     if not application:
-        raise HTTPException(
-            status_code=404,
-            detail="Application tidak ditemukan"
-        )
+        raise HTTPException(status_code=404, detail="Application tidak ditemukan")
 
-    task = session.get(
-        Task,
-        application.task_id
-    )
-
+    task = session.get(Task, application.task_id)
     if not task:
-        raise HTTPException(
-            status_code=404,
-            detail="Task tidak ditemukan"
+        raise HTTPException(status_code=404, detail="Task tidak ditemukan")
+
+    # Cek akses: Employer pemilik task
+    employer_profile = session.exec(
+        select(EmployerProfile).where(
+            EmployerProfile.user_id == current_user.id
         )
-
-    worker_profile = session.get(
-        WorkerProfile,
-        application.worker_id
-    )
-
-    employer_profile = session.get(
-        EmployerProfile,
-        task.employer_id
-    )
-
-    if not worker_profile or not employer_profile:
-        raise HTTPException(
-            status_code=404,
-            detail="Profile terkait assignment tidak ditemukan"
-        )
-
-    is_worker = (
-        current_user.id == worker_profile.user_id
-    )
-
+    ).first()
     is_employer = (
-        current_user.id == employer_profile.user_id
+        employer_profile is not None
+        and task.employer_id == employer_profile.id
     )
 
-    if not is_worker and not is_employer:
+    # Cek akses: Worker terkait assignment
+    worker_profile = session.exec(
+        select(WorkerProfile).where(
+            WorkerProfile.user_id == current_user.id
+        )
+    ).first()
+    is_worker = (
+        worker_profile is not None
+        and application.worker_id == worker_profile.id
+    )
+
+    if not is_employer and not is_worker:
         raise HTTPException(
             status_code=403,
             detail="Anda tidak memiliki akses ke dispute ini"
