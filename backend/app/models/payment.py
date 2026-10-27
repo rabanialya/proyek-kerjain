@@ -90,6 +90,29 @@ class Payment(SQLModel, table=True):
     # Waktu verifikasi Admin
     verified_at: datetime | None = None
 
+    # ---------------------------------------------------------------------------
+    # Kolom pencairan (disbursement) — diisi saat Admin mengkonfirmasi transfer
+    # keluar ke Worker. Ditambahkan oleh migration a1b2c3d4e5f7.
+    # ---------------------------------------------------------------------------
+
+    # Admin yang mengkonfirmasi pencairan ke Worker
+    disbursed_by: UUID | None = Field(
+        default=None,
+        foreign_key="users.id"
+    )
+
+    # Waktu Admin mengkonfirmasi pencairan (berbeda dari paid_at yang dipakai verify)
+    disbursed_at: datetime | None = None
+
+    # Referensi transaksi bank keluar (nomor referensi / kode unik dari bank)
+    disbursement_reference: str | None = None
+
+    # URL file bukti transfer keluar ke Worker (diunggah Admin)
+    disbursement_proof_url: str | None = None
+
+    # Catatan Admin terkait pencairan
+    disbursement_notes: str | None = None
+
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc)
     )

@@ -100,6 +100,13 @@ class PaymentResponse(BaseModel):
     verified_by: UUID | None = None
     verified_at: datetime | None = None
 
+    # Kolom pencairan — diisi saat Admin mengkonfirmasi transfer keluar ke Worker
+    disbursed_by: UUID | None = None
+    disbursed_at: datetime | None = None
+    disbursement_reference: str | None = None
+    disbursement_proof_url: str | None = None
+    disbursement_notes: str | None = None
+
     created_at: datetime
 
     class Config:

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import ClassVar, Set
+from typing import Any, ClassVar, List, Set
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
@@ -44,16 +44,24 @@ class AdminPaymentReject(BaseModel):
 
 class AdminPaymentDisburse(BaseModel):
     """
-    Admin mencatat bahwa pencairan ke Worker sudah dilakukan.
-    Hanya berlaku untuk WORK_PAYMENT yang sudah berstatus verified.
-    
+    Data pencairan yang diisi Admin setelah melakukan transfer manual ke Worker.
+
+    Endpoint menerima multipart/form-data sehingga proof_file dapat diunggah
+    bersama data teks dalam satu request.
+
     Setelah disburse:
       - WORK_PAYMENT status → disbursed
-      - paid_at diisi dengan waktu saat ini
+      - disbursed_at, disbursed_by, disbursement_reference,
+        disbursement_proof_url, disbursement_notes diisi
+      - paid_at juga diisi untuk kompatibilitas data lama
     """
-    notes: str | None = Field(
+    disbursement_reference: str | None = Field(
         default=None,
-        description="Catatan opsional Admin saat mencatat pencairan"
+        description="Referensi transaksi bank keluar (nomor referensi / kode unik)"
+    )
+    disbursement_notes: str | None = Field(
+        default=None,
+        description="Catatan Admin terkait pencairan (opsional)"
     )
 
 
@@ -72,6 +80,14 @@ class AdminPaymentSummaryResponse(BaseModel):
     verified_at: datetime | None = None
     paid_at: datetime | None = None
     transaction_reference: str | None = None
+
+    # Kolom pencairan — diisi saat status = disbursed
+    disbursed_by: UUID | None = None
+    disbursed_at: datetime | None = None
+    disbursement_reference: str | None = None
+    disbursement_proof_url: str | None = None
+    disbursement_notes: str | None = None
+
     created_at: datetime
 
     class Config:
@@ -109,3 +125,19 @@ class AdminDisputeResolve(BaseModel):
     )
 
     VALID_DECISIONS: ClassVar[Set[str]] = {"approve_work", "reject_work", "needs_revision"}
+
+
+# ---------------------------------------------------------------------------
+# Admin Dashboard Stats Schema
+# ---------------------------------------------------------------------------
+
+class AdminStatsResponse(BaseModel):
+    """Statistik ringkasan platform untuk dashboard Admin."""
+    total_users: int
+    active_users: int
+    total_tasks: int
+    published_tasks: int
+    payments_awaiting_verification: int
+    open_disputes: int
+    resolved_disputes: int
+    recent_activity: List[Any] = []

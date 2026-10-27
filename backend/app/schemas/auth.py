@@ -1,4 +1,5 @@
 import re
+from datetime import datetime
 from pydantic import field_validator
 from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field, field_validator
@@ -39,6 +40,12 @@ class UserResponse(BaseModel):
     full_name: str
     phone: str | None = None
     avatar_url: str | None = None
+    is_admin: bool = False
+    is_active: bool = True
+    created_at: datetime | None = None
+
+    class Config:
+        from_attributes = True
 
 
 class TokenResponse(BaseModel):

@@ -1,7 +1,11 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session, select
+import os
+from pathlib import Path
+from uuid import UUID, uuid4
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from sqlmodel import Session, select, func
 from datetime import datetime, timezone
 
 from app.models.user import User
@@ -15,9 +19,9 @@ from app.schemas.admin import (
     UserStatusUpdate,
     AdminPaymentVerify,
     AdminPaymentReject,
-    AdminPaymentDisburse,
     AdminPaymentSummaryResponse,
     AdminDisputeResolve,
+    AdminStatsResponse,
 )
 from app.schemas.payment import PaymentResponse  # noqa: F401 — dipakai oleh endpoint admin payment jika diperlukan
 from app.models.report import Report
@@ -29,11 +33,86 @@ from app.models.category import Category
 from app.schemas.category import CategoryResponse, CategoryCreate, CategoryUpdate
 from app.schemas.task import TaskResponse
 
+# Folder penyimpanan bukti transfer keluar (Admin → Worker) — privat, tidak dapat diakses publik.
+# File lama di uploads/disbursement-proof/ tetap dilayani via router files.py (fallback).
+DISBURSEMENT_PROOF_DIR = Path("_private_uploads") / "disbursement-proof"
+DISBURSEMENT_PROOF_DIR.mkdir(parents=True, exist_ok=True)
+
+# Tipe file yang diizinkan untuk bukti transfer
+ALLOWED_DISBURSEMENT_PROOF_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "application/pdf",
+}
+MAX_DISBURSEMENT_PROOF_SIZE = 10 * 1024 * 1024  # 10 MB
+
 
 router = APIRouter(
     prefix="/admin",
     tags=["Admin"]
 )
+
+
+@router.get(
+    "/stats",
+    response_model=AdminStatsResponse,
+    summary="Statistik ringkasan platform (Admin)",
+)
+def get_admin_stats(
+    session: Session = Depends(get_session),
+    current_admin: User = Depends(get_current_admin),
+):
+    """
+    Mengembalikan statistik agregat platform menggunakan query COUNT langsung ke DB.
+    Tidak mengunduh seluruh data — aman untuk tabel besar.
+    """
+    total_users = session.exec(select(func.count(User.id))).one()
+    active_users = session.exec(
+        select(func.count(User.id)).where(User.is_active == True)  # noqa: E712
+    ).one()
+    total_tasks = session.exec(select(func.count(Task.id))).one()
+    published_tasks = session.exec(
+        select(func.count(Task.id)).where(Task.status == "published")
+    ).one()
+    awaiting_verification = session.exec(
+        select(func.count(Payment.id)).where(
+            Payment.type == "WORK_PAYMENT",
+            Payment.status == "awaiting_verification",
+        )
+    ).one()
+    open_disputes = session.exec(
+        select(func.count(Dispute.id)).where(Dispute.status == "open")
+    ).one()
+    resolved_disputes = session.exec(
+        select(func.count(Dispute.id)).where(Dispute.status == "resolved")
+    ).one()
+    recent_logs = session.exec(
+        select(ActivityLog)
+        .order_by(ActivityLog.created_at.desc())
+        .limit(5)
+    ).all()
+
+    return AdminStatsResponse(
+        total_users=total_users,
+        active_users=active_users,
+        total_tasks=total_tasks,
+        published_tasks=published_tasks,
+        payments_awaiting_verification=awaiting_verification,
+        open_disputes=open_disputes,
+        resolved_disputes=resolved_disputes,
+        recent_activity=[
+            {
+                "id": str(log.id),
+                "action": log.action,
+                "entity_type": log.entity_type,
+                "entity_id": str(log.entity_id),
+                "user_id": str(log.user_id) if log.user_id else None,
+                "created_at": log.created_at.isoformat(),
+            }
+            for log in recent_logs
+        ],
+    )
 
 
 @router.get("/users")
@@ -276,6 +355,22 @@ def resolve_dispute(
 
     session.commit()
     session.refresh(dispute)
+
+    # ── Catat activity log ─────────────────────────────────────────────────
+    log = ActivityLog(
+        user_id=current_admin.id,
+        entity_type="dispute",
+        entity_id=dispute.id,
+        action="resolve_dispute",
+        old_value={"status": "open"},
+        new_value={
+            "status": "resolved",
+            "decision": data.decision,
+            "assignment_status": assignment.status,
+        },
+    )
+    session.add(log)
+    session.commit()
 
     return dispute
 
@@ -613,6 +708,19 @@ def admin_verify_payment(
 
     session.commit()
     session.refresh(payment)
+
+    # ── Catat activity log untuk verifikasi payment ───────────────────────
+    log = ActivityLog(
+        user_id=current_admin.id,
+        entity_type="payment",
+        entity_id=payment.id,
+        action="verify_payment",
+        old_value={"status": "awaiting_verification"},
+        new_value={"status": "verified", "verified_by": str(current_admin.id)},
+    )
+    session.add(log)
+    session.commit()
+
     return payment
 
 
@@ -677,37 +785,82 @@ def admin_reject_payment(
 
     session.commit()
     session.refresh(payment)
+
+    # ── Catat activity log untuk penolakan payment ────────────────────────
+    log = ActivityLog(
+        user_id=current_admin.id,
+        entity_type="payment",
+        entity_id=payment.id,
+        action="reject_payment",
+        old_value={"status": "awaiting_verification"},
+        new_value={"status": "rejected", "rejection_reason": data.rejection_reason},
+    )
+    session.add(log)
+    session.commit()
+
     return payment
 
 
 @router.put(
     "/payments/{payment_id}/disburse",
     response_model=AdminPaymentSummaryResponse,
-    summary="Admin catat pencairan ke Worker selesai",
+    summary="Admin catat dan konfirmasi pencairan ke Worker",
 )
 def admin_disburse_payment(
     payment_id: UUID,
-    data: AdminPaymentDisburse,
+    disbursement_reference: str | None = Form(
+        default=None,
+        description="Referensi transaksi bank keluar (opsional)"
+    ),
+    disbursement_notes: str | None = Form(
+        default=None,
+        description="Catatan Admin terkait pencairan (opsional)"
+    ),
+    proof_file: UploadFile | None = File(
+        default=None,
+        description="File bukti transfer keluar ke Worker (JPG/PNG/WEBP/PDF, maks 10 MB)"
+    ),
     session: Session = Depends(get_session),
     current_admin: User = Depends(get_current_admin),
 ):
     """
-    Admin mencatat bahwa transfer pencairan ke Worker sudah dilakukan.
-    Hanya berlaku untuk WORK_PAYMENT berstatus 'verified'.
+    Admin mengkonfirmasi bahwa transfer manual ke Worker sudah selesai dilakukan.
 
-    PLATFORM_FEE tidak diproses di sini — biaya platform dianggap
-    settled saat verified.
+    Prasyarat yang divalidasi backend:
+      - Payment harus bertipe WORK_PAYMENT
+      - Status harus 'verified' (dana Employer sudah masuk ke platform)
+      - Assignment terkait harus berstatus 'approved' (pekerjaan disetujui)
+      - Tidak boleh ada dispute 'open' pada assignment
+      - Payment belum pernah dicairkan (status bukan 'disbursed')
 
-    Pencairan hanya dapat dicatat setelah verifikasi dana Employer selesai.
+    Row-level locking (SELECT FOR UPDATE) mencegah pencairan ganda
+    dari request yang bersamaan.
+
+    File bukti transfer keluar disimpan di uploads/disbursement-proof/.
+    Akses file melalui endpoint static yang sudah di-mount di main.py.
     """
-    payment = session.get(Payment, payment_id)
+    # ── Row-level lock untuk cegah concurrent disbursement ───────────────
+    # SQLModel with_for_update() menghasilkan SELECT ... FOR UPDATE
+    # sehingga baris payment dikunci sampai transaksi selesai.
+    payment = session.exec(
+        select(Payment).where(Payment.id == payment_id).with_for_update()
+    ).first()
+
     if not payment:
         raise HTTPException(status_code=404, detail="Payment tidak ditemukan")
 
+    # ── Validasi tipe ────────────────────────────────────────────────────
     if payment.type != "WORK_PAYMENT":
         raise HTTPException(
             status_code=400,
             detail="Pencairan hanya berlaku untuk WORK_PAYMENT."
+        )
+
+    # ── Validasi status payment ──────────────────────────────────────────
+    if payment.status == "disbursed":
+        raise HTTPException(
+            status_code=409,
+            detail="Payment ini sudah pernah dicairkan. Pencairan ganda tidak diizinkan."
         )
 
     if payment.status != "verified":
@@ -719,28 +872,130 @@ def admin_disburse_payment(
             )
         )
 
-    # Blokir jika assignment masih disputed
-    if payment.assignment_id:
-        assignment = session.get(Assignment, payment.assignment_id)
-        if assignment and assignment.status == "disputed":
+    # ── Validasi assignment ──────────────────────────────────────────────
+    if not payment.assignment_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Payment tidak memiliki assignment terkait. Tidak dapat dicairkan."
+        )
+
+    assignment = session.get(Assignment, payment.assignment_id)
+    if not assignment:
+        raise HTTPException(
+            status_code=404,
+            detail="Assignment terkait tidak ditemukan."
+        )
+
+    # Assignment harus sudah disetujui (approved)
+    if assignment.status != "approved":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Assignment harus berstatus 'approved' sebelum dapat dicairkan. "
+                f"Status saat ini: '{assignment.status}'."
+            )
+        )
+
+    # ── Cek dispute terbuka ──────────────────────────────────────────────
+    open_dispute = session.exec(
+        select(Dispute).where(
+            Dispute.assignment_id == assignment.id,
+            Dispute.status == "open",
+        )
+    ).first()
+
+    if open_dispute:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Masih ada dispute terbuka untuk assignment ini. "
+                "Selesaikan dispute terlebih dahulu sebelum mencairkan."
+            )
+        )
+
+    # ── Validasi dan simpan file bukti (jika ada) ────────────────────────
+    disbursement_proof_url: str | None = None
+
+    if proof_file and proof_file.filename:
+        # Validasi content-type
+        if proof_file.content_type not in ALLOWED_DISBURSEMENT_PROOF_TYPES:
             raise HTTPException(
                 status_code=400,
                 detail=(
-                    "Assignment masih berstatus disputed. "
-                    "Pencairan diblokir sampai dispute diselesaikan."
+                    f"Format file tidak didukung: '{proof_file.content_type}'. "
+                    "Gunakan JPG, PNG, WEBP, atau PDF."
                 )
             )
 
+        # Baca konten dan validasi ukuran
+        contents = proof_file.file.read()
+        if len(contents) > MAX_DISBURSEMENT_PROOF_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail="Ukuran file melebihi batas maksimum 10 MB."
+            )
+        if len(contents) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="File bukti transfer tidak boleh kosong."
+            )
+
+        # Tentukan ekstensi berdasarkan content-type (tidak mempercayai nama file)
+        ext_map = {
+            "image/jpeg": ".jpg",
+            "image/png": ".png",
+            "image/webp": ".webp",
+            "application/pdf": ".pdf",
+        }
+        extension = ext_map.get(proof_file.content_type, ".bin")
+        filename = f"disbursement_{payment_id}_{uuid4().hex[:8]}{extension}"
+        file_path = DISBURSEMENT_PROOF_DIR / filename
+
+        try:
+            with open(file_path, "wb") as f:
+                f.write(contents)
+        except OSError as exc:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Gagal menyimpan file bukti transfer: {exc}"
+            )
+
+        disbursement_proof_url = f"_private_uploads/disbursement-proof/{filename}"
+
+    # ── Update payment ───────────────────────────────────────────────────
     now = datetime.now(timezone.utc)
+    old_status = payment.status
 
     payment.status = "disbursed"
-    payment.paid_at = now
-    if data.notes:
-        payment.transaction_reference = (
-            f"{payment.transaction_reference or ''} | Pencairan: {data.notes}"
-        ).strip(" |")
-    session.add(payment)
+    payment.disbursed_by = current_admin.id
+    payment.disbursed_at = now
+    payment.paid_at = now  # backward compat — tetap diisi
+    payment.disbursement_reference = disbursement_reference or None
+    payment.disbursement_notes = disbursement_notes or None
 
+    if disbursement_proof_url:
+        payment.disbursement_proof_url = disbursement_proof_url
+
+    session.add(payment)
+    session.flush()  # flush sebelum commit agar ID tersedia untuk log
+
+    # ── Activity log ─────────────────────────────────────────────────────
+    log = ActivityLog(
+        user_id=current_admin.id,
+        entity_type="payment",
+        entity_id=payment.id,
+        action="disburse_payment",
+        old_value={"status": old_status},
+        new_value={
+            "status": "disbursed",
+            "disbursed_by": str(current_admin.id),
+            "disbursed_at": now.isoformat(),
+            "disbursement_reference": disbursement_reference,
+            "has_proof": disbursement_proof_url is not None,
+        },
+    )
+    session.add(log)
     session.commit()
     session.refresh(payment)
+
     return payment

@@ -60,8 +60,9 @@ router = APIRouter(
 
 PLATFORM_FEE_PERCENTAGE = Decimal("0.10")
 
-# Folder penyimpanan bukti transfer — di dalam /uploads/transfer-proof/
-TRANSFER_PROOF_DIR = Path("uploads") / "transfer-proof"
+# Folder penyimpanan bukti transfer (privat — tidak dapat diakses publik).
+# File lama di uploads/transfer-proof/ tetap dilayani via router files.py (fallback).
+TRANSFER_PROOF_DIR = Path("_private_uploads") / "transfer-proof"
 TRANSFER_PROOF_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_PROOF_TYPES = {"image/jpeg", "image/png", "image/webp", "application/pdf"}
@@ -388,14 +389,28 @@ def upload_transfer_proof(
         )
 
     # ── Simpan file ───────────────────────────────────────────────────
-    ext = Path(file.filename).suffix.lower() if file.filename else ".bin"
+    # Ekstensi diambil dari content-type (lebih aman daripada nama file client)
+    ext_map = {
+        "image/jpeg": ".jpg",
+        "image/png": ".png",
+        "image/webp": ".webp",
+        "application/pdf": ".pdf",
+    }
+    # Gunakan content-type untuk ekstensi; fallback ke ekstensi dari nama file
+    # sebagai secondary guess jika content-type tidak dikenal.
+    ext = ext_map.get(file.content_type)
+    if ext is None:
+        # Fallback: ambil ekstensi dari nama file client, tapi normalisasi
+        raw_ext = Path(file.filename).suffix.lower() if file.filename else ".bin"
+        ext = raw_ext if raw_ext in {".jpg", ".jpeg", ".png", ".webp", ".pdf"} else ".bin"
     filename = f"{uuid_module.uuid4()}{ext}"
     file_path = TRANSFER_PROOF_DIR / filename
 
     with open(file_path, "wb") as f:
         f.write(contents)
 
-    proof_url = f"uploads/transfer-proof/{filename}"
+    # Simpan path relatif ke DB — router files.py menggunakan Path(stored_url).name
+    proof_url = f"_private_uploads/transfer-proof/{filename}"
 
     # ── Update WORK_PAYMENT ────────────────────────────────────────────
     payment.transfer_proof_url = proof_url
@@ -675,3 +690,36 @@ def confirm_payment_legacy(
     session.commit()
     session.refresh(payment)
     return payment
+
+
+# =========================================================
+# GET DISBURSEMENT PROOF — DEPRECATED
+#
+# Endpoint ini digantikan oleh GET /files/disbursement-proof/{payment_id}
+# yang melayani file langsung (bukan URL publik).
+# Dipertahankan hanya agar client lama tidak mendapat 404 yang membingungkan,
+# namun mengembalikan 410 Gone dengan pesan redirect.
+# =========================================================
+
+@router.get(
+    "/{payment_id}/disbursement-proof",
+    deprecated=True,
+    summary="[DEPRECATED] Gunakan GET /files/disbursement-proof/{payment_id}",
+    include_in_schema=True,
+)
+def get_disbursement_proof_deprecated(
+    payment_id: UUID,
+    current_user: User = Depends(get_current_user),  # noqa: tetap wajib login
+):
+    """
+    Endpoint ini tidak lagi melayani file.
+    Gunakan GET /files/disbursement-proof/{payment_id} sebagai gantinya.
+    File kini dilayani langsung oleh backend tanpa URL publik.
+    """
+    raise HTTPException(
+        status_code=410,
+        detail=(
+            "Endpoint ini sudah tidak aktif. "
+            "Gunakan GET /files/disbursement-proof/{payment_id} untuk mengakses file."
+        ),
+    )
