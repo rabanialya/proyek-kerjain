@@ -1,5 +1,4 @@
 import logging
-from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.openapi.utils import get_openapi
@@ -7,7 +6,6 @@ from fastapi import Depends, HTTPException, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +25,7 @@ from app.routers.report import router as report_router
 from app.routers.notification import router as notification_router
 from app.routers.activity_log import router as activity_log_router
 from app.routers.admin import router as admin_router
+from app.routers.files import router as files_router
 
 app = FastAPI()
 
@@ -38,17 +37,15 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={"detail": exc.errors()},
     )
 
-# ── Static file serving untuk uploads ──────────────────────────────────────
-# File disimpan di backend/uploads/work-evidence/
-# Dapat diakses via http://127.0.0.1:8000/uploads/work-evidence/<filename>
-UPLOADS_DIR = Path("uploads")
-UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-
-app.mount(
-    "/uploads",
-    StaticFiles(directory=str(UPLOADS_DIR)),
-    name="uploads"
-)
+# ── Static file serving DIHAPUS ────────────────────────────────────────────
+# Sebelumnya: app.mount("/uploads", StaticFiles(...)) memungkinkan siapapun
+# mengakses file sensitif tanpa autentikasi via URL publik.
+#
+# Sekarang: semua file dilayani melalui router files.py yang mewajibkan
+# autentikasi dan memeriksa kepemilikan sebelum mengirim file.
+#
+# Direktori _private_uploads/ dan uploads/ (legacy) TIDAK di-mount sebagai
+# static — tidak ada jalur publik ke file sensitif.
 
 # Add CORS middleware
 app.add_middleware(
@@ -75,6 +72,7 @@ app.include_router(report_router)
 app.include_router(notification_router)
 app.include_router(activity_log_router)
 app.include_router(admin_router)
+app.include_router(files_router)
 
 @app.get("/")
 def root():

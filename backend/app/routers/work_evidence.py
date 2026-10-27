@@ -25,8 +25,9 @@ router = APIRouter(
 # CONFIGURATION
 # =========================================================
 
-# Folder untuk menyimpan file evidence
-UPLOAD_DIR = Path("uploads/work-evidence")
+# Folder untuk menyimpan file evidence (privat — tidak dapat diakses publik).
+# File lama di uploads/work-evidence/ tetap dilayani via router files.py (fallback).
+UPLOAD_DIR = Path("_private_uploads/work-evidence")
 
 UPLOAD_DIR.mkdir(
     parents=True,
@@ -212,10 +213,13 @@ def upload_work_evidence(
 
             created_file_paths.append(file_path)
 
-            # Simpan informasi file ke database
+            # Simpan informasi file ke database.
+            # Simpan sebagai path relatif dengan forward slash.
+            # Router files.py menggunakan Path(stored_url).name untuk
+            # mencari file — format path tidak mempengaruhi keamanan.
             evidence = WorkEvidence(
                 assignment_id=assignment.id,
-                file_url=str(file_path).replace("\\", "/")
+                file_url=f"_private_uploads/work-evidence/{new_filename}",
             )
 
             session.add(evidence)
