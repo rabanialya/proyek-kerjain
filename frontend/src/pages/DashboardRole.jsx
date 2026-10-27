@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 
@@ -9,10 +10,22 @@ import { useAuth } from '../context/AuthContext'
  * Jika belum ada → arahkan ke form pembuatan profil.
  *
  * Satu akun boleh punya kedua peran sekaligus.
+ *
+ * Admin yang membuka halaman ini (langsung via URL atau redirect lama)
+ * otomatis diarahkan ke /admin sebelum halaman dirender.
  */
 export default function DashboardRole() {
   const { user, profileStatus, profileLoading, logout } = useAuth()
   const navigate = useNavigate()
+
+  // Admin tidak boleh melihat halaman pemilihan role ini.
+  // Tangani kasus: Admin membuka /dashboard secara manual atau
+  // datang dari redirect lama yang belum diperbaiki.
+  useEffect(() => {
+    if (user?.is_admin) {
+      navigate('/admin', { replace: true })
+    }
+  }, [user, navigate])
 
   function handleSelectWorker() {
     if (profileStatus?.has_worker_profile) {

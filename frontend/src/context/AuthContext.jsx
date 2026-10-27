@@ -89,6 +89,8 @@ export function AuthProvider({ children }) {
 
   // Login: simpan token, ambil user, ambil status profil.
   // Melempar Error agar komponen pemanggil bisa menampilkan pesan.
+  // Mengembalikan objek user yang baru saja diambil dari /auth/me agar
+  // pemanggil dapat membaca is_admin sebelum melakukan redirect.
   async function login(email, password) {
     const result = await apiRequest('/auth/login', {
       method: 'POST',
@@ -113,6 +115,9 @@ export function AuthProvider({ children }) {
     } finally {
       setProfileLoading(false)
     }
+
+    // Kembalikan user agar komponen Login bisa menentukan redirect berdasarkan role.
+    return currentUser
   }
 
   function logout() {

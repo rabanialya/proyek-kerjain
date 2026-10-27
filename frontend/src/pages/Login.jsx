@@ -25,8 +25,16 @@ function Login() {
     try {
       // login() di AuthContext menangani: POST /auth/login → simpan token →
       // GET /auth/me → GET /profiles/status.
-      await login(email, password)
-      navigate('/dashboard', { replace: true })
+      // Mengembalikan objek user agar kita bisa redirect berdasarkan role.
+      const loggedInUser = await login(email, password)
+
+      // Admin diarahkan langsung ke dashboard Admin.
+      // Worker/Employer diarahkan ke halaman pemilihan peran seperti biasa.
+      if (loggedInUser?.is_admin) {
+        navigate('/admin', { replace: true })
+      } else {
+        navigate('/dashboard', { replace: true })
+      }
     } catch (err) {
       setError(err.message || 'Login gagal. Silakan coba lagi.')
     } finally {
