@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { AuthProvider } from './context/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
+import AdminProtectedRoute from './components/AdminProtectedRoute'
 
 import Login from './pages/Login'
 import Register from './pages/Register'
@@ -24,6 +25,15 @@ import JobDetailPage from './pages/JobDetailPage'
 import EmployerJobsPage from './pages/EmployerJobsPage'
 import EmployerJobDetailPage from './pages/EmployerJobDetailPage'
 
+// Admin
+import AdminLayout from './layouts/AdminLayout'
+import AdminDashboardPage from './pages/admin/AdminDashboardPage'
+import AdminPaymentsPage from './pages/admin/AdminPaymentsPage'
+import AdminPaymentDetailPage from './pages/admin/AdminPaymentDetailPage'
+import AdminDisputesPage from './pages/admin/AdminDisputesPage'
+import AdminDisputeDetailPage from './pages/admin/AdminDisputeDetailPage'
+import AdminActivityLogsPage from './pages/admin/AdminActivityLogsPage'
+
 /**
  * Routing struktur:
  *
@@ -46,6 +56,14 @@ import EmployerJobDetailPage from './pages/EmployerJobDetailPage'
  * /worker/jobs/:assignmentId → JobDetailPage (detail satu pekerjaan)
  * /employer/jobs       → EmployerJobsPage     (pekerjaan aktif employer)
  * /employer/jobs/:assignmentId → EmployerJobDetailPage (review bukti & approve)
+ *
+ * (admin only — butuh is_admin = true)
+ * /admin              → AdminDashboardPage
+ * /admin/payments     → AdminPaymentsPage
+ * /admin/payments/:paymentId  → AdminPaymentDetailPage
+ * /admin/disputes     → AdminDisputesPage
+ * /admin/disputes/:disputeId  → AdminDisputeDetailPage
+ * /admin/activity-logs → AdminActivityLogsPage
  *
  * /                   → redirect ke /dashboard
  * *                   → redirect ke /dashboard (fallback)
@@ -80,6 +98,18 @@ function App() {
             <Route path="/worker/jobs/:assignmentId" element={<JobDetailPage />} />
             <Route path="/employer/jobs" element={<EmployerJobsPage />} />
             <Route path="/employer/jobs/:assignmentId" element={<EmployerJobDetailPage />} />
+          </Route>
+
+          {/* Halaman Admin — hanya user dengan is_admin = true */}
+          <Route element={<AdminProtectedRoute />}>
+            <Route element={<AdminLayout />}>
+              <Route path="/admin" element={<AdminDashboardPage />} />
+              <Route path="/admin/payments" element={<AdminPaymentsPage />} />
+              <Route path="/admin/payments/:paymentId" element={<AdminPaymentDetailPage />} />
+              <Route path="/admin/disputes" element={<AdminDisputesPage />} />
+              <Route path="/admin/disputes/:disputeId" element={<AdminDisputeDetailPage />} />
+              <Route path="/admin/activity-logs" element={<AdminActivityLogsPage />} />
+            </Route>
           </Route>
 
           {/* Fallback */}

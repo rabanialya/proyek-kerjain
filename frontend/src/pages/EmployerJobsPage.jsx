@@ -91,6 +91,23 @@ function AssignmentCard({ job, onClick }) {
 
   const needsAction = job.assignment_status === 'submitted'
 
+  // in_progress setelah pernah submit = revisi pasca-dispute (submitted_at ada)
+  const isRevision =
+    job.assignment_status === 'in_progress' && job.submitted_at != null
+
+  // Tentukan config badge: revisi pakai warna amber agar beda dari in_progress biasa
+  const badgeCfg = isRevision
+    ? {
+        label: 'Sedang Direvisi',
+        cls: 'bg-amber-50 text-amber-700 border-amber-200',
+        dot: 'bg-amber-500',
+      }
+    : EMPLOYER_STATUS_CONFIG[job.assignment_status] ?? {
+        label: job.assignment_status,
+        cls: 'bg-slate-50 text-slate-600 border-slate-200',
+        dot: 'bg-slate-400',
+      }
+
   return (
     <button
       onClick={onClick}
@@ -98,14 +115,22 @@ function AssignmentCard({ job, onClick }) {
         'w-full rounded-2xl border bg-white p-5 text-left transition',
         needsAction
           ? 'border-purple-300 ring-1 ring-purple-200 hover:border-purple-400 hover:shadow-md'
-          : 'border-slate-200 hover:border-emerald-300 hover:shadow-sm',
+          : isRevision
+            ? 'border-amber-200 ring-1 ring-amber-100 hover:border-amber-300 hover:shadow-md'
+            : 'border-slate-200 hover:border-emerald-300 hover:shadow-sm',
         'focus:outline-none focus:ring-2 focus:ring-emerald-200',
       ].join(' ')}
     >
-      {/* Perhatian badge untuk status submitted */}
+      {/* Badge perhatian untuk submitted */}
       {needsAction && (
         <p className="mb-2 text-xs font-semibold text-purple-600 uppercase tracking-wide">
           ⚡ Membutuhkan tindakan
+        </p>
+      )}
+      {/* Badge perhatian untuk revisi */}
+      {isRevision && (
+        <p className="mb-2 text-xs font-semibold text-amber-600 uppercase tracking-wide">
+          ↩ Menunggu revisi Worker
         </p>
       )}
 
@@ -121,7 +146,13 @@ function AssignmentCard({ job, onClick }) {
             {job.task_title}
           </h3>
         </div>
-        <StatusBadge status={job.assignment_status} />
+        {/* Badge pakai config lokal agar revisi tampil amber */}
+        <span
+          className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${badgeCfg.cls}`}
+        >
+          <span className={`h-1.5 w-1.5 rounded-full ${badgeCfg.dot}`} />
+          {badgeCfg.label}
+        </span>
       </div>
 
       {/* Info baris */}
@@ -155,8 +186,8 @@ function AssignmentCard({ job, onClick }) {
             · {job.payment_method}
           </span>
         </p>
-        <p className="text-xs font-medium text-emerald-600">
-          {needsAction ? 'Tinjau sekarang →' : 'Lihat detail →'}
+        <p className={`text-xs font-medium ${isRevision ? 'text-amber-600' : 'text-emerald-600'}`}>
+          {needsAction ? 'Tinjau sekarang →' : isRevision ? 'Lihat revisi →' : 'Lihat detail →'}
         </p>
       </div>
     </button>

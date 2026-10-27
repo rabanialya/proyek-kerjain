@@ -6,6 +6,8 @@ import {
   uploadWorkEvidence,
   fetchWorkEvidences,
   fetchPaymentsByAssignment,
+  fetchWorkEvidenceFile,
+  fetchDisbursementProofFile,
 } from '../lib/api'
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
@@ -117,8 +119,8 @@ function TimelineRow({ icon, label, date }) {
 //
 // Tampil hanya saat status in_progress atau lebih lanjut.
 // Worker dapat upload file; semua pihak terkait dapat melihat daftar bukti.
-
-const API_BASE_URL = 'http://127.0.0.1:8000'
+// File diakses melalui endpoint terlindungi /files/work-evidence/{id} —
+// tidak ada URL publik yang dibuka langsung.
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 const ALLOWED_LABELS = 'JPG, PNG, WEBP, PDF'
@@ -128,6 +130,64 @@ function fileIcon(fileUrl) {
   const ext = fileUrl.split('.').pop().toLowerCase()
   if (ext === 'pdf') return '📄'
   return '🖼️'
+}
+
+// ─── EvidenceItem — buka file via endpoint terlindungi ─────────────────────
+//
+// Menggunakan fetch dengan Bearer token, bukan URL publik langsung.
+// Blob URL sementara dibuat dan langsung dibuka di tab baru, lalu direvoke.
+
+function EvidenceItem({ evidenceId, filename, isPdf, uploadedDate }) {
+  const [opening, setOpening] = useState(false)
+  const [openError, setOpenError] = useState(null)
+
+  async function handleOpen() {
+    setOpening(true)
+    setOpenError(null)
+    let objectUrl = null
+    try {
+      objectUrl = await fetchWorkEvidenceFile(evidenceId)
+      const a = document.createElement('a')
+      a.href = objectUrl
+      a.target = '_blank'
+      a.rel = 'noopener noreferrer'
+      // Beri nama file yang bisa diunduh
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    } catch (err) {
+      setOpenError(err.message ?? 'Gagal membuka file.')
+    } finally {
+      setOpening(false)
+      // Revoke setelah jeda singkat agar browser sempat membuka tab
+      if (objectUrl) {
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 10000)
+      }
+    }
+  }
+
+  return (
+    <li className="flex flex-col gap-1 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+      <div className="flex items-center gap-3">
+        <span className="text-lg">{isPdf ? '📄' : '🖼️'}</span>
+        <div className="flex-1 min-w-0">
+          <p className="truncate text-sm font-medium text-slate-700">{filename}</p>
+          <p className="text-xs text-slate-400">{uploadedDate}</p>
+        </div>
+        <button
+          onClick={handleOpen}
+          disabled={opening}
+          className="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-blue-600 border border-blue-100 hover:bg-blue-50 transition disabled:opacity-60 disabled:cursor-wait"
+        >
+          {opening ? '⏳' : 'Lihat'}
+        </button>
+      </div>
+      {openError && (
+        <p className="text-xs text-red-500 mt-1">{openError}</p>
+      )}
+    </li>
+  )
 }
 
 function WorkEvidencePanel({ job, onEvidenceChange }) {
@@ -318,33 +378,19 @@ function WorkEvidencePanel({ job, onEvidenceChange }) {
               const filename = ev.file_url.split('/').pop()
               const ext = filename.split('.').pop().toLowerCase()
               const isPdf = ext === 'pdf'
-              const fileUrl = `${API_BASE_URL}/${ev.file_url}`
               const uploadedDate = new Date(ev.uploaded_at).toLocaleDateString('id-ID', {
                 day: 'numeric', month: 'short', year: 'numeric',
                 hour: '2-digit', minute: '2-digit',
               })
 
               return (
-                <li
+                <EvidenceItem
                   key={ev.id}
-                  className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3"
-                >
-                  <span className="text-lg">{isPdf ? '📄' : '🖼️'}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate text-sm font-medium text-slate-700">
-                      {filename}
-                    </p>
-                    <p className="text-xs text-slate-400">{uploadedDate}</p>
-                  </div>
-                  <a
-                    href={fileUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="shrink-0 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-blue-600 border border-blue-100 hover:bg-blue-50 transition"
-                  >
-                    Lihat
-                  </a>
-                </li>
+                  evidenceId={ev.id}
+                  filename={filename}
+                  isPdf={isPdf}
+                  uploadedDate={uploadedDate}
+                />
               )
             })}
           </ul>
@@ -410,6 +456,10 @@ function WorkerPaymentPanel({ assignmentId, assignmentStatus }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
+  // URL bukti disbursement — dimuat terpisah karena butuh otorisasi
+  const [proofUrl, setProofUrl] = useState(null)
+  const [proofLoading, setProofLoading] = useState(false)
+
   async function load() {
     setLoading(true)
     setError(null)
@@ -418,6 +468,11 @@ function WorkerPaymentPanel({ assignmentId, assignmentStatus }) {
       // Worker hanya mendapat WORK_PAYMENT
       const wp = Array.isArray(data) ? data.find((p) => p.type === 'WORK_PAYMENT') : null
       setPayment(wp ?? null)
+
+      // Jika sudah disbursed dan ada proof, ambil URL-nya
+      if (wp?.status === 'disbursed' && wp?.disbursement_proof_url) {
+        loadProof(wp.id)
+      }
     } catch (err) {
       // 404 atau belum ada payment — bukan error kritis
       if (!err.message?.includes('404')) {
@@ -425,6 +480,19 @@ function WorkerPaymentPanel({ assignmentId, assignmentStatus }) {
       }
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function loadProof(paymentId) {
+    setProofLoading(true)
+    try {
+      // Fetch file langsung via endpoint terlindungi — tidak ada URL publik
+      const objectUrl = await fetchDisbursementProofFile(paymentId)
+      setProofUrl(objectUrl)
+    } catch (_) {
+      // Proof opsional — gagal tidak blokir tampilan
+    } finally {
+      setProofLoading(false)
     }
   }
 
@@ -493,9 +561,7 @@ function WorkerPaymentPanel({ assignmentId, assignmentStatus }) {
                 <span className="text-lg shrink-0">{cfg.icon}</span>
                 <div>
                   <p className="font-semibold text-sm">{cfg.label}</p>
-                  {cfg.desc && (
-                    <p className="mt-0.5 text-xs opacity-80">{cfg.desc}</p>
-                  )}
+                  {cfg.desc && <p className="mt-0.5 text-xs opacity-80">{cfg.desc}</p>}
                 </div>
               </div>
             )
@@ -509,21 +575,64 @@ function WorkerPaymentPanel({ assignmentId, assignmentStatus }) {
             </span>
           </div>
 
-          {/* Waktu pencairan jika sudah disbursed */}
-          {payment.status === 'disbursed' && payment.paid_at && (
-            <p className="text-xs text-slate-400 text-center">
-              Dicairkan pada{' '}
-              {new Date(payment.paid_at).toLocaleDateString('id-ID', {
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
-            </p>
+          {/* Detail pencairan — hanya saat disbursed */}
+          {payment.status === 'disbursed' && (
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 space-y-2">
+              <p className="text-xs font-semibold text-emerald-700">Rincian Pencairan</p>
+
+              {/* Waktu konfirmasi */}
+              {(payment.disbursed_at || payment.paid_at) && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">Waktu Pencairan</span>
+                  <span className="font-medium text-slate-700">
+                    {new Date(payment.disbursed_at ?? payment.paid_at).toLocaleDateString('id-ID', {
+                      day: 'numeric', month: 'long', year: 'numeric',
+                      hour: '2-digit', minute: '2-digit',
+                    })}
+                  </span>
+                </div>
+              )}
+
+              {/* Referensi transaksi */}
+              {payment.disbursement_reference && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-slate-500">Referensi Bank</span>
+                  <span className="font-mono font-medium text-slate-700">{payment.disbursement_reference}</span>
+                </div>
+              )}
+
+              {/* Catatan Admin */}
+              {payment.disbursement_notes && (
+                <div className="text-xs text-slate-600">
+                  <span className="text-slate-400">Catatan: </span>
+                  {payment.disbursement_notes}
+                </div>
+              )}
+
+              {/* Bukti transfer keluar */}
+              {payment.disbursement_proof_url && (
+                <div className="pt-1">
+                  <p className="text-xs text-slate-400 mb-1">Bukti Transfer Keluar</p>
+                  {proofLoading ? (
+                    <div className="h-6 w-32 animate-pulse rounded bg-emerald-100" />
+                  ) : proofUrl ? (
+                    <a
+                      href={proofUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition"
+                    >
+                      📄 Lihat Bukti Transfer ↗
+                    </a>
+                  ) : (
+                    <span className="text-xs text-slate-400">Bukti tidak dapat dimuat.</span>
+                  )}
+                </div>
+              )}
+            </div>
           )}
 
-          {/* Catatan: Worker tidak bisa konfirmasi pembayaran */}
+          {/* Catatan untuk status non-disbursed */}
           {payment.status !== 'disbursed' && (
             <p className="text-xs text-slate-400 text-center">
               Konfirmasi pembayaran dilakukan oleh Admin setelah verifikasi dana masuk.

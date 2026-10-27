@@ -6,13 +6,15 @@ import {
   settlePayment,
   uploadTransferProof,
   fetchPaymentsByAssignment,
+  createDispute,
+  fetchDisbursementProofFile,
+  fetchWorkEvidenceFile,
 } from '../lib/api'
 import { useEmployerJobs } from '../hooks/useEmployerJobs'
 import { EMPLOYER_STATUS_CONFIG } from './EmployerJobsPage'
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
-
-const API_BASE_URL = 'http://127.0.0.1:8000'
+// API_BASE_URL dihapus — semua file diakses via endpoint terlindungi, bukan URL publik.
 
 function formatDate(isoString) {
   if (!isoString) return null
@@ -78,6 +80,54 @@ function TimelineRow({ icon, label, date }) {
 
 // ─── Panel bukti pekerjaan (read-only untuk Employer) ───────────────────────
 
+// ─── EmployerEvidenceItem — buka file via endpoint terlindungi ──────────────
+function EmployerEvidenceItem({ evidenceId, filename, isPdf, uploadedDate }) {
+  const [opening, setOpening] = useState(false)
+  const [openError, setOpenError] = useState(null)
+
+  async function handleOpen() {
+    setOpening(true)
+    setOpenError(null)
+    let objectUrl = null
+    try {
+      objectUrl = await fetchWorkEvidenceFile(evidenceId)
+      const a = document.createElement('a')
+      a.href = objectUrl
+      a.target = '_blank'
+      a.rel = 'noopener noreferrer'
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    } catch (err) {
+      setOpenError(err.message ?? 'Gagal membuka file.')
+    } finally {
+      setOpening(false)
+      if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl), 10000)
+    }
+  }
+
+  return (
+    <li className="flex flex-col gap-1 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3">
+      <div className="flex items-center gap-3">
+        <span className="text-xl">{isPdf ? '📄' : '🖼️'}</span>
+        <div className="flex-1 min-w-0">
+          <p className="truncate text-sm font-medium text-slate-700">{filename}</p>
+          <p className="text-xs text-slate-400">{uploadedDate}</p>
+        </div>
+        <button
+          onClick={handleOpen}
+          disabled={opening}
+          className="shrink-0 rounded-lg border border-emerald-100 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50 disabled:opacity-60 disabled:cursor-wait"
+        >
+          {opening ? '⏳' : 'Lihat'}
+        </button>
+      </div>
+      {openError && <p className="text-xs text-red-500 mt-1">{openError}</p>}
+    </li>
+  )
+}
+
 function WorkEvidencePanel({ assignmentId }) {
   const [evidences, setEvidences] = useState([])
   const [loading, setLoading] = useState(true)
@@ -140,9 +190,6 @@ function WorkEvidencePanel({ assignmentId }) {
             const filename = ev.file_url.split('/').pop()
             const ext = filename.split('.').pop().toLowerCase()
             const isPdf = ext === 'pdf'
-            // file_url dari backend: "uploads/work-evidence/uuid.ext"
-            // static route: /uploads/work-evidence/uuid.ext
-            const fileUrl = `${API_BASE_URL}/${ev.file_url}`
             const uploadedDate = new Date(ev.uploaded_at).toLocaleDateString('id-ID', {
               day: 'numeric',
               month: 'short',
@@ -152,54 +199,20 @@ function WorkEvidencePanel({ assignmentId }) {
             })
 
             return (
-              <li
+              <EmployerEvidenceItem
                 key={ev.id}
-                className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50 px-4 py-3"
-              >
-                <span className="text-xl">{isPdf ? '📄' : '🖼️'}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="truncate text-sm font-medium text-slate-700">
-                    {filename}
-                  </p>
-                  <p className="text-xs text-slate-400">{uploadedDate}</p>
-                </div>
-                <a
-                  href={fileUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="shrink-0 rounded-lg border border-emerald-100 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-50"
-                >
-                  Lihat
-                </a>
-              </li>
+                evidenceId={ev.id}
+                filename={filename}
+                isPdf={isPdf}
+                uploadedDate={uploadedDate}
+              />
             )
           })}
         </ul>
       )}
 
-      {/* Pratinjau inline gambar (opsional, untuk gambar pertama) */}
-      {evidences.length > 0 && (() => {
-        const firstImage = evidences.find((ev) => {
-          const ext = ev.file_url.split('.').pop().toLowerCase()
-          return ['jpg', 'jpeg', 'png', 'webp'].includes(ext)
-        })
-        if (!firstImage) return null
-        return (
-          <div className="mt-4 overflow-hidden rounded-xl border border-slate-100">
-            <p className="bg-slate-50 px-4 py-2 text-xs font-medium text-slate-500">
-              Pratinjau — {firstImage.file_url.split('/').pop()}
-            </p>
-            <img
-              src={`${API_BASE_URL}/${firstImage.file_url}`}
-              alt="Pratinjau bukti pekerjaan"
-              className="max-h-64 w-full object-contain bg-white"
-              onError={(e) => {
-                e.currentTarget.style.display = 'none'
-              }}
-            />
-          </div>
-        )
-      })()}
+      {/* Pratinjau inline dihapus — tidak bisa menggunakan URL publik.
+          Employer dapat membuka file via tombol Lihat di setiap item. */}
     </section>
   )
 }
@@ -244,26 +257,115 @@ function ApproveDialog({ isOpen, jobTitle, workerName, onConfirm, onCancel, load
   )
 }
 
-// ─── Dialog konfirmasi dispute ───────────────────────────────────────────────
+// ─── Dialog form dispute — dengan alasan wajib ────────────────────────────
 
-function DisputeDialog({ isOpen, jobTitle, workerName, onConfirm, onCancel, loading }) {
+/**
+ * Dialog ini menggantikan DisputeDialog lama.
+ *
+ * Perubahan penting:
+ *   - Sebelumnya: hanya konfirmasi sederhana, memanggil updateAssignmentStatus('disputed')
+ *     yang TIDAK membuat record di tabel disputes.
+ *   - Sekarang: ada field reason (wajib) dan description (opsional), memanggil
+ *     POST /disputes yang membuat record resmi dan mengubah status assignment.
+ *
+ * Backend (routers/dispute.py) membutuhkan:
+ *   { assignment_id, reason, description? }
+ * dan memvalidasi assignment.status === "submitted".
+ */
+function DisputeFormDialog({ isOpen, assignmentId, jobTitle, workerName, onSuccess, onCancel }) {
+  const [reason, setReason] = useState('')
+  const [description, setDescription] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+
+  // Reset form setiap kali dialog dibuka
+  useEffect(() => {
+    if (isOpen) {
+      setReason('')
+      setDescription('')
+      setError(null)
+    }
+  }, [isOpen])
+
   if (!isOpen) return null
+
+  const canSubmit = reason.trim().length >= 5
+
+  async function handleSubmit() {
+    if (!canSubmit) return
+    setLoading(true)
+    setError(null)
+    try {
+      await createDispute({
+        assignment_id: assignmentId,
+        reason: reason.trim(),
+        description: description.trim() || null,
+      })
+      onSuccess()
+    } catch (err) {
+      setError(err.message ?? 'Gagal mengajukan dispute.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
+      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
         <p className="text-center text-3xl">⚠️</p>
         <h3 className="mt-3 text-center font-semibold text-slate-900">
-          Ajukan dispute?
+          Ajukan Dispute
         </h3>
-        <p className="mt-2 text-center text-sm text-slate-500">
-          Anda akan mengajukan dispute untuk hasil kerja{' '}
-          <strong>{workerName}</strong> pada tugas{' '}
-          <strong>{jobTitle}</strong>.
+        <p className="mt-1 text-center text-sm text-slate-500">
+          Pekerjaan <strong>{workerName}</strong> pada tugas <strong>{jobTitle}</strong>
         </p>
-        <p className="mt-2 text-center text-xs text-slate-400">
-          Pekerjaan akan ditandai sebagai dispute dan perlu diselesaikan
-          lebih lanjut.
+        <p className="mt-1 text-center text-xs text-slate-400">
+          Dispute akan diteruskan ke Admin Kerjain untuk ditinjau.
         </p>
+
+        <div className="mt-5 space-y-4">
+          {/* Alasan — wajib */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">
+              Alasan Dispute <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              disabled={loading}
+              placeholder="Misal: tidak melampirkan bukti, hasil tidak sesuai…"
+              className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-200 disabled:opacity-60"
+              maxLength={200}
+            />
+            {reason.length > 0 && reason.length < 5 && (
+              <p className="mt-1 text-xs text-red-500">Minimal 5 karakter.</p>
+            )}
+          </div>
+
+          {/* Deskripsi — opsional */}
+          <div>
+            <label className="mb-1.5 block text-sm font-medium text-slate-700">
+              Deskripsi <span className="text-slate-400 font-normal">(opsional)</span>
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              disabled={loading}
+              rows={3}
+              placeholder="Jelaskan lebih detail apa yang bermasalah…"
+              className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-red-200 disabled:opacity-60"
+              maxLength={1000}
+            />
+          </div>
+
+          {error && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              ⚠️ {error}
+            </div>
+          )}
+        </div>
+
         <div className="mt-5 flex gap-3">
           <button
             onClick={onCancel}
@@ -273,11 +375,11 @@ function DisputeDialog({ isOpen, jobTitle, workerName, onConfirm, onCancel, load
             Batal
           </button>
           <button
-            onClick={onConfirm}
-            disabled={loading}
-            className="flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-semibold text-white hover:bg-red-600 disabled:opacity-50"
+            onClick={handleSubmit}
+            disabled={!canSubmit || loading}
+            className="flex-1 rounded-xl bg-red-500 py-2.5 text-sm font-semibold text-white hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {loading ? 'Memproses...' : 'Ya, Dispute'}
+            {loading ? 'Memproses...' : 'Ajukan Dispute'}
           </button>
         </div>
       </div>
@@ -316,7 +418,6 @@ function PaymentStatusBadge({ status }) {
 
 const ALLOWED_PROOF_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 const MAX_PROOF_SIZE = 10 * 1024 * 1024 // 10 MB
-const API_BASE_URL_PROOF = 'http://127.0.0.1:8000'
 
 function PaymentPanel({ job, onStatusUpdate }) {
   const [settlement, setSettlement] = useState(null)
@@ -331,6 +432,9 @@ function PaymentPanel({ job, onStatusUpdate }) {
   const [uploadSuccess, setUploadSuccess] = useState(null)
   const proofInputRef = useRef(null)
 
+  // URL bukti disbursement — dimuat setelah status disbursed terdeteksi
+  const [disbursementProofUrl, setDisbursementProofUrl] = useState(null)
+
   // Muat payment yang sudah ada saat halaman dibuka (idempoten)
   async function loadExistingPayments() {
     try {
@@ -338,10 +442,26 @@ function PaymentPanel({ job, onStatusUpdate }) {
       if (data && data.length > 0) {
         const wp = data.find((p) => p.type === 'WORK_PAYMENT')
         const pf = data.find((p) => p.type === 'PLATFORM_FEE')
-        if (wp) setPayments({ work_payment: wp, platform_fee: pf })
+        if (wp) {
+          setPayments({ work_payment: wp, platform_fee: pf })
+          // Jika sudah disbursed dan ada proof, ambil URL-nya
+          if (wp.status === 'disbursed' && wp.disbursement_proof_url) {
+            loadDisbursementProof(wp.id)
+          }
+        }
       }
     } catch (_) {
       // Belum ada payment — biarkan null
+    }
+  }
+
+  async function loadDisbursementProof(paymentId) {
+    try {
+      // Fetch file langsung via endpoint terlindungi — tidak ada URL publik
+      const objectUrl = await fetchDisbursementProofFile(paymentId)
+      setDisbursementProofUrl(objectUrl)
+    } catch (_) {
+      // Proof opsional — gagal tidak blokir tampilan
     }
   }
 
@@ -585,13 +705,69 @@ function PaymentPanel({ job, onStatusUpdate }) {
         </div>
       )}
 
-      {/* Status disbursed */}
+      {/* Status disbursed — tampilkan rincian pencairan ke Worker */}
       {isDisbursed && (
-        <div className="rounded-xl bg-emerald-50 border border-emerald-300 px-4 py-3 text-sm text-emerald-800">
-          <p className="font-semibold">✓ Pembayaran Selesai</p>
-          <p className="mt-1 text-xs">
-            Dana telah dicairkan ke Worker. Proses pembayaran untuk pekerjaan ini telah selesai.
+        <div className="rounded-xl bg-emerald-50 border border-emerald-300 px-4 py-4 text-sm text-emerald-800 space-y-3">
+          <p className="font-semibold">✓ Pembayaran Selesai — Dana Dicairkan ke Worker</p>
+          <p className="text-xs text-emerald-700">
+            Dana dari transfer Anda telah diverifikasi dan dicairkan ke Worker oleh Admin Kerjain.
+            Proses pembayaran untuk pekerjaan ini telah selesai.
           </p>
+
+          {/* Rincian pencairan */}
+          <div className="rounded-lg bg-white border border-emerald-200 px-3 py-3 space-y-1.5">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Rincian Pencairan</p>
+
+            <div className="flex justify-between text-xs">
+              <span className="text-slate-500">Nominal Dicairkan</span>
+              <span className="font-semibold text-slate-700">{formatCurrency(wp.amount)}</span>
+            </div>
+
+            {(wp.disbursed_at || wp.paid_at) && (
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Waktu Pencairan</span>
+                <span className="font-medium text-slate-700">
+                  {new Date(wp.disbursed_at ?? wp.paid_at).toLocaleDateString('id-ID', {
+                    day: 'numeric', month: 'long', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit',
+                  })}
+                </span>
+              </div>
+            )}
+
+            {wp.disbursement_reference && (
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Referensi Bank</span>
+                <span className="font-mono font-medium text-slate-700">{wp.disbursement_reference}</span>
+              </div>
+            )}
+
+            {wp.disbursement_notes && (
+              <div className="text-xs text-slate-600 pt-1">
+                <span className="text-slate-400">Catatan: </span>
+                {wp.disbursement_notes}
+              </div>
+            )}
+          </div>
+
+          {/* Bukti transfer keluar — hanya tampilkan tautan, bukan detail rekening Worker */}
+          {wp.disbursement_proof_url && (
+            <div>
+              <p className="text-xs text-emerald-700 mb-1 font-medium">Bukti Transfer Keluar (Platform → Worker)</p>
+              {disbursementProofUrl ? (
+                <a
+                  href={disbursementProofUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition"
+                >
+                  📄 Lihat Bukti Pencairan ↗
+                </a>
+              ) : (
+                <span className="text-xs text-emerald-600">Memuat bukti…</span>
+              )}
+            </div>
+          )}
         </div>
       )}
     </section>
@@ -625,24 +801,8 @@ function EmployerActionPanel({ job, onStatusUpdate }) {
     }
   }
 
-  async function handleDispute() {
-    setActionLoading(true)
-    setActionError(null)
-    try {
-      await updateAssignmentStatus(job.assignment_id, 'disputed')
-      setDisputeOpen(false)
-      setSuccessMsg('Dispute berhasil diajukan.')
-      onStatusUpdate()
-    } catch (err) {
-      setDisputeOpen(false)
-      setActionError(err.message ?? 'Gagal mengajukan dispute.')
-    } finally {
-      setActionLoading(false)
-    }
-  }
-
   // Status awal — menunggu Worker
-  if (status === 'assigned' || status === 'in_progress') {
+  if (status === 'assigned') {
     return (
       <section className="rounded-2xl bg-white p-6 shadow-sm">
         <h2 className="mb-1 text-sm font-semibold uppercase tracking-widest text-slate-400">
@@ -651,6 +811,33 @@ function EmployerActionPanel({ job, onStatusUpdate }) {
         <p className="text-sm text-slate-500">
           {EMPLOYER_STATUS_CONFIG[status]?.description ?? 'Menunggu Worker menyelesaikan pekerjaan.'}
         </p>
+      </section>
+    )
+  }
+
+  // Worker sedang mengerjakan — termasuk setelah revisi dispute
+  if (status === 'in_progress') {
+    const isAfterDispute = job.submitted_at != null
+    return (
+      <section className="rounded-2xl bg-white p-6 shadow-sm">
+        <h2 className="mb-2 text-sm font-semibold uppercase tracking-widest text-slate-400">
+          Status
+        </h2>
+        {isAfterDispute ? (
+          // submitted_at ada artinya Worker pernah submit sebelumnya → ini revisi pasca-dispute
+          <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
+            <p className="font-semibold">↩ Revisi Diminta</p>
+            <p className="mt-1 text-xs leading-relaxed">
+              Admin telah memutuskan bahwa pekerjaan perlu direvisi.
+              Worker sedang mengerjakan ulang. Anda akan mendapatkan notifikasi
+              saat hasil baru dikirim.
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-500">
+            {EMPLOYER_STATUS_CONFIG[status]?.description ?? 'Worker sedang mengerjakan tugas.'}
+          </p>
+        )}
       </section>
     )
   }
@@ -707,13 +894,19 @@ function EmployerActionPanel({ job, onStatusUpdate }) {
         onCancel={() => setApproveOpen(false)}
         loading={actionLoading}
       />
-      <DisputeDialog
+
+      {/* DisputeFormDialog menangani pemanggilan createDispute sendiri */}
+      <DisputeFormDialog
         isOpen={disputeOpen}
+        assignmentId={job.assignment_id}
         jobTitle={job.task_title}
         workerName={job.worker_display_name}
-        onConfirm={handleDispute}
+        onSuccess={() => {
+          setDisputeOpen(false)
+          setSuccessMsg('Dispute berhasil diajukan. Admin akan meninjau pekerjaan ini.')
+          onStatusUpdate()
+        }}
         onCancel={() => setDisputeOpen(false)}
-        loading={actionLoading}
       />
 
       <section className="rounded-2xl bg-white p-6 shadow-sm">

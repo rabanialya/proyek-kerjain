@@ -5,10 +5,13 @@ export function getAuthToken() {
 }
 
 export async function apiRequest(path, options = {}) {
+  // Jika body adalah FormData, jangan set Content-Type — browser/fetch mengisi
+  // boundary multipart secara otomatis. Set JSON hanya untuk body non-FormData.
+  const isFormData = options.body instanceof FormData
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...options.headers,
     },
   })
@@ -361,4 +364,317 @@ export async function fetchPaymentsByAssignment(assignmentId) {
 // GET /payments/:paymentId — detail satu payment record.
 export async function fetchPaymentById(paymentId) {
   return apiRequestAuth(`/payments/${paymentId}`)
+}
+
+// ─── Admin API ─────────────────────────────────────────────────────────────
+// Semua fungsi di bawah memerlukan token Admin yang valid.
+// Backend memvalidasi get_current_admin() pada setiap endpoint.
+
+// GET /admin/stats — statistik ringkasan platform (agregat, bukan semua data).
+export async function adminFetchStats() {
+  return apiRequestAuth('/admin/stats')
+}
+
+// ── Admin: Users ────────────────────────────────────────────────────────────
+
+// GET /admin/users — semua pengguna terdaftar.
+export async function adminFetchUsers() {
+  return apiRequestAuth('/admin/users')
+}
+
+// GET /admin/users/:userId — detail satu pengguna.
+export async function adminFetchUserDetail(userId) {
+  return apiRequestAuth(`/admin/users/${userId}`)
+}
+
+// PUT /admin/users/:userId/status — aktifkan atau nonaktifkan pengguna.
+// body: { is_active: boolean }
+export async function adminUpdateUserStatus(userId, isActive) {
+  return apiRequestAuth(`/admin/users/${userId}/status`, {
+    method: 'PUT',
+    body: JSON.stringify({ is_active: isActive }),
+  })
+}
+
+// ── Admin: Payments ─────────────────────────────────────────────────────────
+
+// GET /admin/payments — semua payment, diurutkan terbaru dulu.
+export async function adminFetchPayments() {
+  return apiRequestAuth('/admin/payments')
+}
+
+// GET /admin/payments/awaiting — WORK_PAYMENT berstatus awaiting_verification.
+export async function adminFetchPaymentsAwaiting() {
+  return apiRequestAuth('/admin/payments/awaiting')
+}
+
+// GET /admin/payments/:paymentId — detail satu payment.
+export async function adminFetchPaymentDetail(paymentId) {
+  return apiRequestAuth(`/admin/payments/${paymentId}`)
+}
+
+// PUT /admin/payments/:paymentId/verify — konfirmasi dana masuk ke rekening platform.
+// body: { notes?: string }
+// Hanya berlaku untuk WORK_PAYMENT berstatus pending atau awaiting_verification.
+// Assignment yang masih disputed diblokir.
+export async function adminVerifyPayment(paymentId, body = {}) {
+  return apiRequestAuth(`/admin/payments/${paymentId}/verify`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+}
+
+// PUT /admin/payments/:paymentId/reject — tolak bukti transfer Employer.
+// body: { rejection_reason: string } — wajib, minimal 5 karakter.
+// Hanya berlaku untuk WORK_PAYMENT berstatus awaiting_verification.
+export async function adminRejectPayment(paymentId, body) {
+  return apiRequestAuth(`/admin/payments/${paymentId}/reject`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+}
+
+// PUT /admin/payments/:paymentId/disburse — konfirmasi pencairan ke Worker.
+// Menerima multipart/form-data karena bisa disertai file bukti transfer keluar.
+// fields:
+//   disbursement_reference?: string   — referensi transaksi bank keluar
+//   disbursement_notes?: string       — catatan Admin (opsional)
+//   proof_file?: File                 — bukti transfer keluar (JPG/PNG/WEBP/PDF, maks 10 MB)
+// Hanya berlaku untuk WORK_PAYMENT berstatus verified.
+// Assignment harus approved dan tidak ada dispute open.
+export async function adminDisbursePayment(paymentId, { disbursementReference, disbursementNotes, proofFile } = {}) {
+  const formData = new FormData()
+  if (disbursementReference) formData.append('disbursement_reference', disbursementReference)
+  if (disbursementNotes) formData.append('disbursement_notes', disbursementNotes)
+  if (proofFile) formData.append('proof_file', proofFile)
+
+  return apiRequestAuth(`/admin/payments/${paymentId}/disburse`, {
+    method: 'PUT',
+    body: formData,
+    // Content-Type TIDAK diset manual — browser/fetch mengisi boundary multipart otomatis
+  })
+}
+
+// ─── Secure File Access ────────────────────────────────────────────────────
+// Semua fungsi di bawah mengambil file sensitif melalui endpoint terlindungi.
+// Tidak ada URL publik — backend memverifikasi token dan kepemilikan sebelum
+// mengirimkan file.
+
+/**
+ * Mengambil file bukti kerja Worker sebagai Blob object URL.
+ * Endpoint: GET /files/work-evidence/{evidenceId}
+ *
+ * @param {string} evidenceId  UUID evidence dari WorkEvidenceResponse.id
+ * @returns {Promise<string>}  Object URL sementara (revoke setelah digunakan)
+ */
+export async function fetchWorkEvidenceFile(evidenceId) {
+  const token = getAuthToken()
+  if (!token) throw new Error('Tidak ada sesi aktif. Silakan login kembali.')
+
+  const response = await fetch(`${API_BASE_URL}/files/work-evidence/${evidenceId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null)
+    const message =
+      typeof data?.detail === 'string'
+        ? data.detail
+        : 'Gagal mengakses file bukti kerja.'
+    throw new Error(message)
+  }
+
+  const blob = await response.blob()
+  return URL.createObjectURL(blob)
+}
+
+/**
+ * Mengambil file bukti transfer masuk (Employer → Platform) sebagai Blob object URL.
+ * Endpoint: GET /files/transfer-proof/{paymentId}
+ * Hanya Employer pemilik task dan Admin yang dapat mengakses.
+ *
+ * @param {string} paymentId  UUID payment dari PaymentResponse.id
+ * @returns {Promise<string>}  Object URL sementara (revoke setelah digunakan)
+ */
+export async function fetchTransferProofFile(paymentId) {
+  const token = getAuthToken()
+  if (!token) throw new Error('Tidak ada sesi aktif. Silakan login kembali.')
+
+  const response = await fetch(`${API_BASE_URL}/files/transfer-proof/${paymentId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null)
+    const message =
+      typeof data?.detail === 'string'
+        ? data.detail
+        : 'Gagal mengakses bukti transfer.'
+    throw new Error(message)
+  }
+
+  const blob = await response.blob()
+  return URL.createObjectURL(blob)
+}
+
+/**
+ * Mengambil file bukti pencairan (Platform → Worker) sebagai Blob object URL.
+ * Endpoint: GET /files/disbursement-proof/{paymentId}
+ * Worker, Employer, dan Admin dapat mengakses sesuai kepemilikan.
+ *
+ * @param {string} paymentId  UUID payment dari PaymentResponse.id
+ * @returns {Promise<string>}  Object URL sementara (revoke setelah digunakan)
+ */
+export async function fetchDisbursementProofFile(paymentId) {
+  const token = getAuthToken()
+  if (!token) throw new Error('Tidak ada sesi aktif. Silakan login kembali.')
+
+  const response = await fetch(`${API_BASE_URL}/files/disbursement-proof/${paymentId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => null)
+    const message =
+      typeof data?.detail === 'string'
+        ? data.detail
+        : 'Gagal mengakses bukti pencairan.'
+    throw new Error(message)
+  }
+
+  const blob = await response.blob()
+  return URL.createObjectURL(blob)
+}
+
+// GET /payments/:paymentId/disbursement-proof
+// DEPRECATED — endpoint backend sudah tidak aktif (410 Gone).
+// Gunakan fetchDisbursementProofFile() sebagai gantinya.
+// Fungsi ini dipertahankan hanya untuk referensi; jangan dipanggil dari komponen baru.
+/** @deprecated Gunakan fetchDisbursementProofFile() */
+export async function fetchDisbursementProof(paymentId) {
+  // Langsung arahkan ke endpoint baru agar tidak ada kode yang masih pakai ini
+  return fetchDisbursementProofFile(paymentId)
+}
+
+// ─── Disputes (Employer) ───────────────────────────────────────────────────
+
+// POST /disputes — Employer mengajukan dispute untuk assignment yang berstatus submitted.
+// body: { assignment_id: string, reason: string, description?: string }
+// Hanya Employer pemilik task yang bisa memanggil ini.
+// Assignment harus berstatus "submitted" — backend memvalidasi.
+export async function createDispute(body) {
+  return apiRequestAuth('/disputes', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+// GET /disputes/my — semua dispute yang diajukan oleh user yang login.
+export async function fetchMyDisputes() {
+  return apiRequestAuth('/disputes/my')
+}
+
+// GET /disputes/:disputeId — detail satu dispute (Employer atau Worker terkait).
+export async function fetchDisputeById(disputeId) {
+  return apiRequestAuth(`/disputes/${disputeId}`)
+}
+
+// ── Admin: Disputes ─────────────────────────────────────────────────────────
+
+// GET /admin/disputes — semua dispute, diurutkan terbaru dulu.
+export async function adminFetchDisputes() {
+  return apiRequestAuth('/admin/disputes')
+}
+
+// GET /admin/disputes/:disputeId — detail satu dispute.
+export async function adminFetchDisputeDetail(disputeId) {
+  return apiRequestAuth(`/admin/disputes/${disputeId}`)
+}
+
+// PUT /admin/disputes/:disputeId/resolve — selesaikan dispute.
+// body: { decision: string, resolution: string }
+// decision harus salah satu dari: approve_work | reject_work | needs_revision
+// resolution wajib diisi, minimal 10 karakter.
+export async function adminResolveDispute(disputeId, body) {
+  return apiRequestAuth(`/admin/disputes/${disputeId}/resolve`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+}
+
+// ── Admin: Activity Logs ────────────────────────────────────────────────────
+
+// GET /admin/activity-logs — semua activity log, diurutkan terbaru dulu.
+export async function adminFetchActivityLogs() {
+  return apiRequestAuth('/admin/activity-logs')
+}
+
+// GET /admin/activity-logs/:logId — detail satu activity log.
+export async function adminFetchActivityLogDetail(logId) {
+  return apiRequestAuth(`/admin/activity-logs/${logId}`)
+}
+
+// ── Admin: Categories ───────────────────────────────────────────────────────
+
+// GET /admin/categories — semua kategori (termasuk yang tidak aktif).
+export async function adminFetchCategories() {
+  return apiRequestAuth('/admin/categories')
+}
+
+// POST /admin/categories — buat kategori baru.
+// body: { name: string }
+export async function adminCreateCategory(body) {
+  return apiRequestAuth('/admin/categories', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+// PUT /admin/categories/:categoryId — perbarui kategori.
+// body: { name?: string, is_active?: boolean }
+export async function adminUpdateCategory(categoryId, body) {
+  return apiRequestAuth(`/admin/categories/${categoryId}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+}
+
+// DELETE /admin/categories/:categoryId — hapus kategori.
+export async function adminDeleteCategory(categoryId) {
+  return apiRequestAuth(`/admin/categories/${categoryId}`, {
+    method: 'DELETE',
+  })
+}
+
+// ── Admin: Tasks ────────────────────────────────────────────────────────────
+
+// GET /admin/tasks — semua task (semua status).
+export async function adminFetchTasks() {
+  return apiRequestAuth('/admin/tasks')
+}
+
+// GET /admin/tasks/:taskId — detail satu task.
+export async function adminFetchTaskDetail(taskId) {
+  return apiRequestAuth(`/admin/tasks/${taskId}`)
+}
+
+// ── Admin: Reports ──────────────────────────────────────────────────────────
+
+// GET /admin/reports — semua laporan.
+export async function adminFetchReports() {
+  return apiRequestAuth('/admin/reports')
+}
+
+// GET /admin/reports/:reportId — detail satu laporan.
+export async function adminFetchReportDetail(reportId) {
+  return apiRequestAuth(`/admin/reports/${reportId}`)
+}
+
+// PUT /admin/reports/:reportId/resolve — selesaikan laporan.
+// body: { resolution: string }
+export async function adminResolveReport(reportId, body) {
+  return apiRequestAuth(`/admin/reports/${reportId}/resolve`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
 }
