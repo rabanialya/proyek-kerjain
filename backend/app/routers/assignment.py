@@ -10,6 +10,7 @@ from app.models.employer_profile import EmployerProfile
 from app.models.task import Task
 from app.models.user import User
 from app.models.worker_profile import WorkerProfile
+from app.models.work_evidence import WorkEvidence
 from app.models.category import Category
 from app.schemas.assignment import (
     AssignmentCreate,
@@ -19,6 +20,7 @@ from app.schemas.assignment import (
     EmployerJobResponse,
 )
 
+from app.services import create_notification, log_activity
 from app.utils.dependencies import get_current_user, get_session
 
 
@@ -118,6 +120,36 @@ def create_assignment(
         assignment.deadline_at = None
 
     session.add(assignment)
+
+    # ── Notifikasi ke Worker yang ditugaskan + Activity Log (actor: Employer) ──
+    # Penerima: application.worker_id -> WorkerProfile.user_id. Satu transaksi.
+    worker_profile = session.get(WorkerProfile, application.worker_id)
+    if worker_profile is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Profil Worker tidak ditemukan",
+        )
+
+    create_notification(
+        session,
+        user_id=worker_profile.user_id,
+        title="Anda ditugaskan pada pekerjaan",
+        message=(
+            f"Anda ditugaskan untuk task \"{task.title}\". "
+            "Silakan mulai pengerjaan."
+        ),
+        entity_type="assignment",
+        entity_id=assignment.id,
+    )
+    log_activity(
+        session,
+        user_id=current_user.id,
+        entity_type="assignment",
+        entity_id=assignment.id,
+        action="create_assignment",
+        new_value={"status": "assigned", "application_id": str(application.id)},
+    )
+
     session.commit()
     session.refresh(assignment)
 
@@ -653,6 +685,7 @@ def update_assignment_status(
     # -----------------------------------------------------
 
     if is_worker:
+        old_status = assignment.status
 
         if data.status == "in_progress":
 
@@ -665,6 +698,17 @@ def update_assignment_status(
             assignment.status = "in_progress"
             assignment.started_at = datetime.now(timezone.utc)
 
+            # Activity Log: perubahan status (actor: Worker). Tanpa notifikasi.
+            log_activity(
+                session,
+                user_id=current_user.id,
+                entity_type="assignment",
+                entity_id=assignment.id,
+                action="update_assignment_status",
+                old_value={"status": old_status},
+                new_value={"status": "in_progress"},
+            )
+
         elif data.status == "submitted":
 
             if assignment.status != "in_progress":
@@ -673,8 +717,54 @@ def update_assignment_status(
                     detail="Assignment harus berstatus in_progress sebelum disubmit"
                 )
 
+            # Validasi: minimal satu work evidence milik assignment ini
+            evidence_count = session.exec(
+                select(WorkEvidence).where(
+                    WorkEvidence.assignment_id == assignment.id
+                )
+            ).all()
+
+            if not evidence_count:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "Tidak dapat mengirim hasil pekerjaan tanpa bukti. "
+                        "Unggah minimal satu bukti pekerjaan terlebih dahulu."
+                    )
+                )
+
             assignment.status = "submitted"
             assignment.submitted_at = datetime.now(timezone.utc)
+
+            # Notifikasi ke Employer pemilik task + Activity Log (actor: Worker).
+            # Penerima: task.employer_id -> EmployerProfile.user_id.
+            employer_owner = session.get(EmployerProfile, task.employer_id)
+            if employer_owner is None:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Profil Employer pemilik task tidak ditemukan",
+                )
+
+            create_notification(
+                session,
+                user_id=employer_owner.user_id,
+                title="Hasil pekerjaan dikirim",
+                message=(
+                    f"Worker mengirim hasil pekerjaan untuk task "
+                    f"\"{task.title}\". Silakan tinjau."
+                ),
+                entity_type="assignment",
+                entity_id=assignment.id,
+            )
+            log_activity(
+                session,
+                user_id=current_user.id,
+                entity_type="assignment",
+                entity_id=assignment.id,
+                action="update_assignment_status",
+                old_value={"status": old_status},
+                new_value={"status": "submitted"},
+            )
 
         else:
 
@@ -709,7 +799,21 @@ def update_assignment_status(
                     detail="Assignment harus berstatus submitted sebelum diajukan dispute"
                 )
 
+            old_status = assignment.status
             assignment.status = "disputed"
+
+            # Activity Log: transisi ke disputed (actor: Employer). Tanpa notifikasi —
+            # notifikasi "dispute dibuka" ditangani handler create_dispute (POST /disputes),
+            # sehingga event yang sama tidak dicatat dua kali.
+            log_activity(
+                session,
+                user_id=current_user.id,
+                entity_type="assignment",
+                entity_id=assignment.id,
+                action="update_assignment_status",
+                old_value={"status": old_status},
+                new_value={"status": "disputed"},
+            )
 
         else:
 

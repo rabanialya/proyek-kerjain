@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { useUnreadNotifications } from '../hooks/useUnreadNotifications'
 
 // ─── Konfigurasi navigasi sidebar ─────────────────────────────────────────
 
@@ -70,6 +71,33 @@ function SidebarDisabled({ icon, label }) {
   )
 }
 
+// ─── Notifikasi (sidebar) ───────────────────────────────────────────────────
+
+function SidebarNotificationLink({ onClose }) {
+  const { unreadCount } = useUnreadNotifications()
+  return (
+    <NavLink
+      to="/notifications"
+      onClick={onClose}
+      className={({ isActive }) =>
+        `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors ${
+          isActive
+            ? 'bg-blue-600 text-white shadow-sm'
+            : 'text-slate-300 hover:bg-slate-700 hover:text-white'
+        }`
+      }
+    >
+      <span className="text-base leading-none">🔔</span>
+      <span>Notifikasi</span>
+      {unreadCount > 0 && (
+        <span className="ml-auto rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-bold text-white">
+          {unreadCount > 99 ? '99+' : unreadCount}
+        </span>
+      )}
+    </NavLink>
+  )
+}
+
 // ─── Sidebar utama ─────────────────────────────────────────────────────────
 
 function Sidebar({ onClose }) {
@@ -115,6 +143,8 @@ function Sidebar({ onClose }) {
         {NAV_ITEMS.map((item) => (
           <SidebarLink key={item.to} {...item} onClick={onClose} />
         ))}
+
+        <SidebarNotificationLink onClose={onClose} />
 
         {NAV_COMING_SOON.length > 0 && (
           <>

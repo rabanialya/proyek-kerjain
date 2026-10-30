@@ -17,6 +17,7 @@ from app.schemas.dispute import (
     DisputeResponse,
 )
 
+from app.services import create_notification, log_activity
 from app.utils.dependencies import (
     get_current_user,
     get_session,
@@ -139,6 +140,36 @@ def create_dispute(
     assignment.status = "disputed"
     assignment.updated_at = datetime.now(timezone.utc)
     session.add(assignment)
+
+    # ── Notifikasi ke Worker terkait + Activity Log (actor: Employer) ──
+    # Penerima: application.worker_id -> WorkerProfile.user_id. Satu transaksi
+    # dengan dispute & perubahan status assignment.
+    worker_profile = session.get(WorkerProfile, application.worker_id)
+    if worker_profile is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Profil Worker tidak ditemukan",
+        )
+
+    create_notification(
+        session,
+        user_id=worker_profile.user_id,
+        title="Dispute diajukan pada pekerjaan Anda",
+        message=(
+            f"Employer mengajukan dispute untuk pekerjaan Anda pada task "
+            f"\"{task.title}\". Silakan lihat detail dispute."
+        ),
+        entity_type="dispute",
+        entity_id=dispute.id,
+    )
+    log_activity(
+        session,
+        user_id=current_user.id,
+        entity_type="dispute",
+        entity_id=dispute.id,
+        action="create_dispute",
+        new_value={"status": "open", "assignment_status": "disputed"},
+    )
 
     session.commit()
     session.refresh(dispute)

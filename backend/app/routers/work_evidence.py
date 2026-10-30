@@ -12,6 +12,7 @@ from app.models.worker_profile import WorkerProfile
 from app.models.employer_profile import EmployerProfile
 from app.models.work_evidence import WorkEvidence
 from app.schemas.work_evidence import WorkEvidenceResponse
+from app.services import log_activity
 from app.utils.dependencies import get_current_user, get_session
 
 
@@ -224,6 +225,18 @@ def upload_work_evidence(
 
             session.add(evidence)
             created_evidences.append(evidence)
+
+        # Activity Log: satu catatan per operasi upload (actor: Worker,
+        # entity: assignment). Tidak mencatat isi file, nama file asli,
+        # token, atau data sensitif apa pun — hanya jumlah file.
+        log_activity(
+            session,
+            user_id=current_user.id,
+            entity_type="assignment",
+            entity_id=assignment.id,
+            action="upload_work_evidence",
+            new_value={"file_count": len(created_evidences)},
+        )
 
         # Commit database setelah seluruh file berhasil disimpan
         session.commit()

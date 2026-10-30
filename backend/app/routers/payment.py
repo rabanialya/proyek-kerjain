@@ -51,6 +51,7 @@ from app.schemas.payment import (
     PaymentSettlementResponse,
     PaymentUploadProofResponse,
 )
+from app.services import create_notification, log_activity
 from app.utils.dependencies import get_current_user, get_session
 
 router = APIRouter(
@@ -309,6 +310,20 @@ def settle_assignment_payment(
         )
         session.add(platform_fee_payment)
 
+    # ── Activity Log: Employer memulai pembayaran via alur settle (actor: Employer) ──
+    # Tanpa notifikasi pada tahap ini. Entity = WORK_PAYMENT yang dibuat/diambil.
+    log_activity(
+        session,
+        user_id=current_user.id,
+        entity_type="payment",
+        entity_id=work_payment.id,
+        action="settle_payment",
+        new_value={
+            "work_payment_status": work_payment.status,
+            "platform_fee_status": platform_fee_payment.status,
+        },
+    )
+
     session.commit()
     session.refresh(work_payment)
     session.refresh(platform_fee_payment)
@@ -431,6 +446,33 @@ def upload_transfer_proof(
         platform_fee.transfer_proof_url = proof_url
         platform_fee.rejection_reason = None
         session.add(platform_fee)
+
+    # ── Notifikasi ke Admin berwenang + Activity Log (actor: Employer) ──
+    # Penerima: semua User.is_admin & is_active. Satu transaksi dengan perubahan status.
+    admins = session.exec(
+        select(User).where(User.is_admin == True, User.is_active == True)  # noqa: E712
+    ).all()
+    for admin in admins:
+        create_notification(
+            session,
+            user_id=admin.id,
+            title="Bukti transfer baru perlu diverifikasi",
+            message=(
+                f"Employer mengunggah bukti transfer untuk task \"{task.title}\". "
+                "Status: menunggu verifikasi."
+            ),
+            entity_type="payment",
+            entity_id=payment.id,
+        )
+
+    log_activity(
+        session,
+        user_id=current_user.id,
+        entity_type="payment",
+        entity_id=payment.id,
+        action="upload_transfer_proof",
+        new_value={"status": "awaiting_verification"},
+    )
 
     session.commit()
     session.refresh(payment)

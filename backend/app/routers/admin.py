@@ -14,6 +14,9 @@ from app.models.assignment import Assignment
 from app.models.application import Application
 from app.models.task import Task
 from app.models.dispute import Dispute
+from app.models.employer_profile import EmployerProfile
+from app.models.worker_profile import WorkerProfile
+from app.services import create_notification, log_activity
 from app.utils.dependencies import get_current_admin, get_session
 from app.schemas.admin import (
     UserStatusUpdate,
@@ -353,11 +356,70 @@ def resolve_dispute(
     assignment.updated_at = now
     session.add(assignment)
 
-    session.commit()
-    session.refresh(dispute)
+    # ── Notifikasi ke Worker & Employer terdampak + Activity Log (actor: Admin) ──
+    # Penerima via relasi DB. Pesan mengikuti keputusan yang sudah ada
+    # (approve_work / needs_revision / reject_work) — tanpa mengarang kebijakan baru.
+    # Semua disimpan dalam satu transaksi dengan penyelesaian dispute.
+    application = session.get(Application, assignment.application_id)
+    task = session.get(Task, application.task_id) if application else None
+    task_title = task.title if task else "task"
 
-    # ── Catat activity log ─────────────────────────────────────────────────
-    log = ActivityLog(
+    worker_profile = (
+        session.get(WorkerProfile, application.worker_id) if application else None
+    )
+    employer_profile = (
+        session.get(EmployerProfile, task.employer_id) if task else None
+    )
+
+    if data.decision == "approve_work":
+        w_msg = (
+            f"Dispute untuk task \"{task_title}\" diselesaikan: pekerjaan Anda "
+            "diterima. Pembayaran dapat dilanjutkan oleh Employer."
+        )
+        e_msg = (
+            f"Dispute untuk task \"{task_title}\" diselesaikan dengan keputusan: "
+            "pekerjaan diterima (approve_work). Pembayaran dapat dilanjutkan."
+        )
+    elif data.decision == "needs_revision":
+        w_msg = (
+            f"Dispute untuk task \"{task_title}\" diselesaikan: pekerjaan perlu "
+            "direvisi. Silakan kerjakan ulang dan kirim kembali hasilnya."
+        )
+        e_msg = (
+            f"Dispute untuk task \"{task_title}\" diselesaikan: worker diminta "
+            "merevisi pekerjaan (needs_revision)."
+        )
+    else:  # reject_work
+        w_msg = (
+            f"Dispute untuk task \"{task_title}\" diselesaikan: hasil pekerjaan "
+            "ditolak. Assignment ditutup."
+        )
+        e_msg = (
+            f"Dispute untuk task \"{task_title}\" diselesaikan: hasil pekerjaan "
+            "ditolak (reject_work). Assignment ditutup."
+        )
+
+    if worker_profile is not None:
+        create_notification(
+            session,
+            user_id=worker_profile.user_id,
+            title="Dispute Anda diselesaikan Admin",
+            message=w_msg,
+            entity_type="dispute",
+            entity_id=dispute.id,
+        )
+    if employer_profile is not None:
+        create_notification(
+            session,
+            user_id=employer_profile.user_id,
+            title="Dispute Anda diselesaikan Admin",
+            message=e_msg,
+            entity_type="dispute",
+            entity_id=dispute.id,
+        )
+
+    log_activity(
+        session,
         user_id=current_admin.id,
         entity_type="dispute",
         entity_id=dispute.id,
@@ -369,8 +431,9 @@ def resolve_dispute(
             "assignment_status": assignment.status,
         },
     )
-    session.add(log)
+
     session.commit()
+    session.refresh(dispute)
 
     return dispute
 
@@ -706,11 +769,28 @@ def admin_verify_payment(
             platform_fee.paid_at = now
             session.add(platform_fee)
 
-    session.commit()
-    session.refresh(payment)
+    # ── Notifikasi ke Employer terkait + Activity Log (actor: Admin) ──
+    # Penerima: payment.task_id -> task.employer_id -> EmployerProfile.user_id.
+    # Satu transaksi dengan verifikasi (menggantikan commit terpisah untuk log).
+    if payment.task_id:
+        task = session.get(Task, payment.task_id)
+        if task is not None:
+            employer_profile = session.get(EmployerProfile, task.employer_id)
+            if employer_profile is not None:
+                create_notification(
+                    session,
+                    user_id=employer_profile.user_id,
+                    title="Pembayaran Anda diverifikasi",
+                    message=(
+                        "Bukti transfer Anda telah diverifikasi Admin. "
+                        "Dana diterima platform."
+                    ),
+                    entity_type="payment",
+                    entity_id=payment.id,
+                )
 
-    # ── Catat activity log untuk verifikasi payment ───────────────────────
-    log = ActivityLog(
+    log_activity(
+        session,
         user_id=current_admin.id,
         entity_type="payment",
         entity_id=payment.id,
@@ -718,8 +798,9 @@ def admin_verify_payment(
         old_value={"status": "awaiting_verification"},
         new_value={"status": "verified", "verified_by": str(current_admin.id)},
     )
-    session.add(log)
+
     session.commit()
+    session.refresh(payment)
 
     return payment
 
@@ -783,11 +864,28 @@ def admin_reject_payment(
             platform_fee.verified_at = now
             session.add(platform_fee)
 
-    session.commit()
-    session.refresh(payment)
+    # ── Notifikasi ke Employer terkait + Activity Log (actor: Admin) ──
+    # Alasan penolakan ditampilkan ke Employer (aman — itu tujuannya).
+    if payment.task_id:
+        task = session.get(Task, payment.task_id)
+        if task is not None:
+            employer_profile = session.get(EmployerProfile, task.employer_id)
+            if employer_profile is not None:
+                safe_reason = (data.rejection_reason or "").strip() or "tidak disebutkan"
+                create_notification(
+                    session,
+                    user_id=employer_profile.user_id,
+                    title="Bukti transfer Anda ditolak",
+                    message=(
+                        f"Bukti transfer ditolak Admin. Alasan: {safe_reason}. "
+                        "Silakan unggah ulang bukti transfer."
+                    ),
+                    entity_type="payment",
+                    entity_id=payment.id,
+                )
 
-    # ── Catat activity log untuk penolakan payment ────────────────────────
-    log = ActivityLog(
+    log_activity(
+        session,
         user_id=current_admin.id,
         entity_type="payment",
         entity_id=payment.id,
@@ -795,8 +893,9 @@ def admin_reject_payment(
         old_value={"status": "awaiting_verification"},
         new_value={"status": "rejected", "rejection_reason": data.rejection_reason},
     )
-    session.add(log)
+
     session.commit()
+    session.refresh(payment)
 
     return payment
 
@@ -979,8 +1078,26 @@ def admin_disburse_payment(
     session.add(payment)
     session.flush()  # flush sebelum commit agar ID tersedia untuk log
 
-    # ── Activity log ─────────────────────────────────────────────────────
-    log = ActivityLog(
+    # ── Notifikasi ke Worker yang menerima pencairan + Activity Log (actor: Admin) ──
+    # Penerima: assignment.application_id -> application.worker_id -> WorkerProfile.user_id.
+    application = session.get(Application, assignment.application_id)
+    if application is not None:
+        worker_profile = session.get(WorkerProfile, application.worker_id)
+        if worker_profile is not None:
+            create_notification(
+                session,
+                user_id=worker_profile.user_id,
+                title="Pencairan pembayaran diterima",
+                message=(
+                    "Admin telah mencairkan pembayaran pekerjaan Anda. "
+                    "Dana telah ditransfer."
+                ),
+                entity_type="payment",
+                entity_id=payment.id,
+            )
+
+    log_activity(
+        session,
         user_id=current_admin.id,
         entity_type="payment",
         entity_id=payment.id,
@@ -994,7 +1111,6 @@ def admin_disburse_payment(
             "has_proof": disbursement_proof_url is not None,
         },
     )
-    session.add(log)
     session.commit()
     session.refresh(payment)
 

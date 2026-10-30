@@ -678,3 +678,31 @@ export async function adminResolveReport(reportId, body) {
     body: JSON.stringify(body),
   })
 }
+
+
+// ─── Notifications ──────────────────────────────────────────────────────────
+// Semua endpoint notifikasi memerlukan token user yang valid.
+// Backend memfilter notifikasi berdasarkan user_id == current_user.id,
+// sehingga pengguna hanya melihat notifikasinya sendiri (tidak ada akses
+// lintas pengguna). Jangan menduplikasi mekanisme token — gunakan apiRequestAuth.
+
+// GET /notifications — semua notifikasi user yang sedang login, urut terbaru
+// dulu (order_by created_at.desc). Response: NotificationResponse[]
+export async function fetchNotifications() {
+  return apiRequestAuth('/notifications')
+}
+
+// GET /notifications/unread — notifikasi yang belum dibaca (is_read == false).
+// Response: NotificationResponse[]
+export async function fetchUnreadNotifications() {
+  return apiRequestAuth('/notifications/unread')
+}
+
+// PUT /notifications/:notificationId/read — tandai satu notifikasi sebagai
+// sudah dibaca. Backend memverifikasi kepemilikan (403 jika bukan milik user).
+// Response: NotificationResponse (dengan is_read = true)
+export async function markNotificationRead(notificationId) {
+  return apiRequestAuth(`/notifications/${notificationId}/read`, {
+    method: 'PUT',
+  })
+}

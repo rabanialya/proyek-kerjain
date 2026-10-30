@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useDashboardEmployer } from '../hooks/useDashboardEmployer'
 import { publishTask } from '../lib/api'
+import NotificationBell from '../components/NotificationBell'
 
 // ─── Komponen kecil ────────────────────────────────────────────────────────
 
@@ -242,12 +243,15 @@ export default function EmployerDashboard() {
                     </p>
                   )}
                 </div>
-                <button
-                  onClick={() => navigate('/dashboard')}
-                  className="shrink-0 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                >
-                  Ganti peran
-                </button>
+                <div className="flex shrink-0 items-center gap-2">
+                  <NotificationBell />
+                  <button
+                    onClick={() => navigate('/dashboard')}
+                    className="shrink-0 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
+                  >
+                    Ganti peran
+                  </button>
+                </div>
               </div>
 
               {/* Tagline atau deskripsi */}

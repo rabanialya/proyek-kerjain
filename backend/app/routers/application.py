@@ -16,6 +16,7 @@ from app.schemas.application import (
     ApplicationWithWorkerResponse,
     WorkerSummary,
 )
+from app.services import create_notification, log_activity
 from app.utils.dependencies import get_current_user, get_session
 
 
@@ -117,6 +118,34 @@ def create_application(
     )
 
     session.add(application)
+
+    # ── Notifikasi ke Employer pemilik task + Activity Log (actor: Worker) ──
+    # Penerima ditentukan via relasi DB (task.employer_id -> EmployerProfile.user_id),
+    # bukan dari body request. Semua disimpan dalam satu transaksi dengan application.
+    employer_owner = session.get(EmployerProfile, task.employer_id)
+    if employer_owner is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Profil Employer pemilik task tidak ditemukan",
+        )
+
+    create_notification(
+        session,
+        user_id=employer_owner.user_id,
+        title="Lamaran baru diterima",
+        message=f"Ada lamaran baru untuk task \"{task.title}\".",
+        entity_type="application",
+        entity_id=application.id,
+    )
+    log_activity(
+        session,
+        user_id=current_user.id,
+        entity_type="application",
+        entity_id=application.id,
+        action="create_application",
+        new_value={"status": "pending", "task_id": str(task.id)},
+    )
+
     session.commit()
     session.refresh(application)
 
@@ -417,9 +446,50 @@ def update_application_status(
                 detail="Jumlah worker yang dibutuhkan sudah terpenuhi",
             )
 
+    old_status = application.status  # selalu "pending" di titik ini
+
     application.status = data.status
 
     session.add(application)
+
+    # ── Notifikasi ke Worker terkait + Activity Log (actor: Employer) ──
+    # Penerima ditentukan via relasi DB (application.worker_id ->
+    # WorkerProfile.user_id). Satu transaksi dengan perubahan status.
+    worker_profile = session.get(WorkerProfile, application.worker_id)
+    if worker_profile is None:
+        raise HTTPException(
+            status_code=500,
+            detail="Profil Worker tidak ditemukan",
+        )
+
+    if data.status == "accepted":
+        notif_title = "Lamaran Anda diterima"
+        notif_message = (
+            f"Lamaran Anda untuk task \"{task.title}\" diterima. "
+            "Tunggu penugasan dari Employer."
+        )
+    else:  # rejected
+        notif_title = "Lamaran Anda ditolak"
+        notif_message = f"Lamaran Anda untuk task \"{task.title}\" ditolak."
+
+    create_notification(
+        session,
+        user_id=worker_profile.user_id,
+        title=notif_title,
+        message=notif_message,
+        entity_type="application",
+        entity_id=application.id,
+    )
+    log_activity(
+        session,
+        user_id=current_user.id,
+        entity_type="application",
+        entity_id=application.id,
+        action="update_application_status",
+        old_value={"status": old_status},
+        new_value={"status": data.status},
+    )
+
     session.commit()
     session.refresh(application)
 

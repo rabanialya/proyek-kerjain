@@ -24,6 +24,7 @@ import MyJobsPage from './pages/MyJobsPage'
 import JobDetailPage from './pages/JobDetailPage'
 import EmployerJobsPage from './pages/EmployerJobsPage'
 import EmployerJobDetailPage from './pages/EmployerJobDetailPage'
+import NotificationsPage from './pages/NotificationsPage'
 
 // Admin
 import AdminLayout from './layouts/AdminLayout'
@@ -98,6 +99,7 @@ function App() {
             <Route path="/worker/jobs/:assignmentId" element={<JobDetailPage />} />
             <Route path="/employer/jobs" element={<EmployerJobsPage />} />
             <Route path="/employer/jobs/:assignmentId" element={<EmployerJobDetailPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
           </Route>
 
           {/* Halaman Admin — hanya user dengan is_admin = true */}
