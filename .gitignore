@@ -2,6 +2,7 @@
 backend/venv/
 __pycache__/
 *.py[cod]
+.pytest_cache/
 
 # Environment variables
 .env
@@ -22,3 +23,6 @@ Thumbs.db
 # Uploaded files
 backend/uploads/*
 !backend/uploads/.gitkeep
+
+# Private uploaded files
+backend/_private_uploads/
