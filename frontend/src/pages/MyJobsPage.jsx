@@ -1,5 +1,8 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMyWorkerJobs } from '../hooks/useMyWorkerJobs'
+import { fetchPaymentsByAssignment } from '../lib/api'
+import PaymentStatusBadge from '../components/PaymentStatusBadge'
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -75,7 +78,20 @@ function StatusBadge({ status }) {
   )
 }
 
-function JobCard({ job, onClick }) {
+// Komponen penampil status pembayaran pada kartu Worker (read-only).
+// Hanya ditampilkan untuk assignment berstatus "approved".
+//
+// paymentStatuses[assignmentId]:
+//   undefined = masih memuat | 'NONE' = belum ada | 'ERROR' = gagal | status
+function WorkerPaymentStatusForCard({ assignmentId, paymentStatuses }) {
+  const p = paymentStatuses?.[assignmentId]
+  if (p === undefined) return <span className="text-xs text-slate-300">memuat…</span>
+  if (p === 'NONE') return <span className="text-xs text-slate-400">Belum ada pembayaran</span>
+  if (p === 'ERROR') return <span className="text-xs text-slate-400">Gagal memuat</span>
+  return <PaymentStatusBadge status={p} />
+}
+
+function JobCard({ job, onClick, paymentStatuses }) {
   const cfg = STATUS_CONFIG[job.assignment_status]
   const dateLabel = job.started_at
     ? `Dimulai ${formatDate(job.started_at)}`
@@ -117,6 +133,17 @@ function JobCard({ job, onClick }) {
         </div>
       </div>
 
+      {/* Status pembayaran — terpisah dari status penugasan */}
+      {job.assignment_status === 'approved' && (
+        <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
+          <span className="text-xs text-slate-400">Pembayaran:</span>
+          <WorkerPaymentStatusForCard
+            assignmentId={job.assignment_id}
+            paymentStatuses={paymentStatuses}
+          />
+        </div>
+      )}
+
       {/* Footer: upah + keterangan status */}
       <div className="mt-4 flex items-center justify-between gap-3">
         <p className="text-sm font-bold text-slate-800">
@@ -144,6 +171,42 @@ function JobCard({ job, onClick }) {
 export default function MyJobsPage() {
   const navigate = useNavigate()
   const { jobs, loading, error, reload } = useMyWorkerJobs()
+
+  // Status pembayaran per assignment (hanya untuk "approved").
+  // Diambil sekali setelah jobs dimuat — menghindari request berulang.
+  const [paymentStatuses, setPaymentStatuses] = useState({})
+
+  useEffect(() => {
+    if (loading || error || jobs.length === 0) return
+    let cancelled = false
+
+    const approvedJobs = jobs.filter((j) => j.assignment_status === 'approved')
+    if (approvedJobs.length === 0) {
+      setPaymentStatuses({})
+      return
+    }
+
+    Promise.all(
+      approvedJobs.map(async (j) => {
+        try {
+          const data = await fetchPaymentsByAssignment(j.assignment_id)
+          const wp = Array.isArray(data)
+            ? data.find((p) => p.type === 'WORK_PAYMENT')
+            : null
+          return { id: j.assignment_id, status: wp ? wp.status : 'NONE' }
+        } catch {
+          return { id: j.assignment_id, status: 'ERROR' }
+        }
+      })
+    ).then((results) => {
+      if (cancelled) return
+      const map = {}
+      for (const r of results) map[r.id] = r.status
+      setPaymentStatuses(map)
+    })
+
+    return () => { cancelled = true }
+  }, [jobs, loading, error])
 
   // ── Loading ──
   if (loading) {
@@ -242,6 +305,7 @@ export default function MyJobsPage() {
               <JobCard
                 key={job.assignment_id}
                 job={job}
+                paymentStatuses={paymentStatuses}
                 onClick={() => navigate(`/worker/jobs/${job.assignment_id}`)}
               />
             ))}

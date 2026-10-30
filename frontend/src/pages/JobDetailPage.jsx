@@ -432,8 +432,8 @@ const WORKER_PAYMENT_STATUS = {
     icon: '✅',
   },
   rejected: {
-    label: 'Bukti Ditolak',
-    desc: 'Admin menolak bukti transfer Employer. Employer perlu mengirim ulang.',
+    label: 'Bukti Transfer Ditolak',
+    desc: 'Admin menolak bukti transfer Employer. Employer perlu mengunggah ulang bukti transfer yang valid.',
     cls: 'bg-red-50 text-red-700 border-red-200',
     icon: '⚠️',
   },

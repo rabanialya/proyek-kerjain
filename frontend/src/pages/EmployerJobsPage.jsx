@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useEmployerJobs } from '../hooks/useEmployerJobs'
+import { fetchPaymentsByAssignment } from '../lib/api'
+import PaymentStatusBadge from '../components/PaymentStatusBadge'
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -82,7 +84,31 @@ function StatusBadge({ status }) {
   )
 }
 
-function AssignmentCard({ job, onClick }) {
+// Menampilkan status pembayaran sebagai info terpisah dari status penugasan.
+// Hanya assignment berstatus "approved" yang memiliki record pembayaran,
+// jadi fetch payment hanya dilakukan untuk assignment tersebut (efisien,
+// menghindari request berulang yang tidak perlu).
+//
+// paymentStatuses[assignmentId]:
+//   undefined (masih memuat) | 'NONE' (belum ada payment) | 'ERROR' | status
+function PaymentStatusForCard({ job, paymentStatuses }) {
+  const status = job.assignment_status
+
+  if (status === 'approved') {
+    const p = paymentStatuses?.[job.assignment_id]
+    if (p === undefined) return <span className="text-xs text-slate-300">memuat…</span>
+    if (p === 'NONE') return <span className="text-xs text-slate-400">Belum ada pembayaran</span>
+    if (p === 'ERROR') return <span className="text-xs text-slate-400">Gagal memuat status pembayaran</span>
+    return <PaymentStatusBadge status={p} />
+  }
+
+  if (status === 'disputed_closed') return <span className="text-xs text-slate-400">Tidak diproses</span>
+  if (status === 'disputed') return <span className="text-xs text-slate-400">Diblokir (dispute aktif)</span>
+  // assigned / in_progress / submitted — pembayaran belum dibuat
+  return <span className="text-xs text-slate-400">Belum ada pembayaran</span>
+}
+
+function AssignmentCard({ job, onClick, paymentStatuses }) {
   const dateLabel = job.submitted_at
     ? `Dikirim ${formatDate(job.submitted_at)}`
     : job.started_at
@@ -178,6 +204,12 @@ function AssignmentCard({ job, onClick }) {
         </div>
       </div>
 
+      {/* Status pembayaran — info terpisah dari status penugasan */}
+      <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
+        <span className="text-xs text-slate-400">Pembayaran:</span>
+        <PaymentStatusForCard job={job} paymentStatuses={paymentStatuses} />
+      </div>
+
       {/* Footer */}
       <div className="mt-4 flex items-center justify-between gap-3">
         <p className="text-sm font-bold text-slate-800">
@@ -212,6 +244,46 @@ export default function EmployerJobsPage() {
 
   // State tab aktif disimpan lokal
   const [activeTab, setActiveTab] = useState('all')
+
+  // Status pembayaran per assignment (hanya untuk assignment berstatus
+  // approved). Diambil sekali setelah jobs dimuat; tidak diulang setiap
+  // render sehingga menghindari request berulang yang tidak perlu.
+  const [paymentStatuses, setPaymentStatuses] = useState({})
+
+  useEffect(() => {
+    if (loading || error || jobs.length === 0) return
+    let cancelled = false
+
+    // Hanya assignment "approved" yang bisa memiliki record pembayaran.
+    const approvedJobs = jobs.filter((j) => j.assignment_status === 'approved')
+    if (approvedJobs.length === 0) {
+      setPaymentStatuses({})
+      return
+    }
+
+    Promise.all(
+      approvedJobs.map(async (j) => {
+        try {
+          const data = await fetchPaymentsByAssignment(j.assignment_id)
+          const wp = Array.isArray(data)
+            ? data.find((p) => p.type === 'WORK_PAYMENT')
+            : null
+          return { id: j.assignment_id, status: wp ? wp.status : 'NONE' }
+        } catch {
+          return { id: j.assignment_id, status: 'ERROR' }
+        }
+      })
+    ).then((results) => {
+      if (cancelled) return
+      const map = {}
+      for (const r of results) map[r.id] = r.status
+      setPaymentStatuses(map)
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [jobs, loading, error])
 
   // ── Loading ──
   if (loading) {
@@ -379,6 +451,7 @@ export default function EmployerJobsPage() {
               <AssignmentCard
                 key={job.assignment_id}
                 job={job}
+                paymentStatuses={paymentStatuses}
                 onClick={() =>
                   navigate(`/employer/jobs/${job.assignment_id}`)
                 }

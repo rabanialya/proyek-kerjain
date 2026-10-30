@@ -12,6 +12,7 @@ import {
 } from '../lib/api'
 import { useEmployerJobs } from '../hooks/useEmployerJobs'
 import { EMPLOYER_STATUS_CONFIG } from './EmployerJobsPage'
+import { PAYMENT_STATUS_LABELS as PAYMENT_STATUS_LABELS_SHARED } from '../lib/statusLabels'
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 // API_BASE_URL dihapus — semua file diakses via endpoint terlindungi, bukan URL publik.
@@ -388,18 +389,12 @@ function DisputeFormDialog({ isOpen, assignmentId, jobTitle, workerName, onSucce
 }
 
 // ─── Label status payment ────────────────────────────────────────────────────
-
-const PAYMENT_STATUS_LABELS = {
-  pending: { label: 'Menunggu Diproses', cls: 'bg-yellow-50 text-yellow-700 border-yellow-200' },
-  awaiting_verification: { label: 'Menunggu Verifikasi Admin', cls: 'bg-blue-50 text-blue-700 border-blue-200' },
-  verified: { label: 'Dana Terverifikasi', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  rejected: { label: 'Bukti Ditolak', cls: 'bg-red-50 text-red-700 border-red-200' },
-  disbursed: { label: 'Sudah Dicairkan ke Worker', cls: 'bg-emerald-50 text-emerald-800 border-emerald-300' },
-  confirmed: { label: 'Dikonfirmasi (Legacy)', cls: 'bg-slate-50 text-slate-600 border-slate-200' },
-}
+// Gunakan PAYMENT_STATUS_LABELS dari statusLabels.js agar konsisten lintas
+// halaman. Label "rejected" → "Bukti Transfer Ditolak" (lebih deskriptif dari
+// "Bukti Ditolak"). Alur upload ulang dan panel tetap tidak berubah.
 
 function PaymentStatusBadge({ status }) {
-  const cfg = PAYMENT_STATUS_LABELS[status] ?? { label: status, cls: 'bg-slate-50 text-slate-600 border-slate-200' }
+  const cfg = PAYMENT_STATUS_LABELS_SHARED[status] ?? { label: status, cls: 'bg-slate-50 text-slate-600 border-slate-200' }
   return (
     <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold ${cfg.cls}`}>
       {cfg.label}
