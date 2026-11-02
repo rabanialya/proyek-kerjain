@@ -32,9 +32,23 @@ app = FastAPI()
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     logger.error("422 Validation Error on %s %s: %s", request.method, request.url.path, exc.errors())
+
+    def _sanitize(errors: list) -> list:
+        """Konversi objek non-serializable (mis. ValueError) di dalam ctx ke string."""
+        sanitized = []
+        for err in errors:
+            clean = dict(err)
+            if "ctx" in clean and isinstance(clean["ctx"], dict):
+                clean["ctx"] = {
+                    k: str(v) if not isinstance(v, (str, int, float, bool, type(None))) else v
+                    for k, v in clean["ctx"].items()
+                }
+            sanitized.append(clean)
+        return sanitized
+
     return JSONResponse(
         status_code=422,
-        content={"detail": exc.errors()},
+        content={"detail": _sanitize(exc.errors())},
     )
 
 # ── Static file serving DIHAPUS ────────────────────────────────────────────
