@@ -407,6 +407,7 @@ def resolve_dispute(
             message=w_msg,
             entity_type="dispute",
             entity_id=dispute.id,
+            target_role="worker",
         )
     if employer_profile is not None:
         create_notification(
@@ -416,6 +417,7 @@ def resolve_dispute(
             message=e_msg,
             entity_type="dispute",
             entity_id=dispute.id,
+            target_role="employer",
         )
 
     log_activity(
@@ -787,6 +789,7 @@ def admin_verify_payment(
                     ),
                     entity_type="payment",
                     entity_id=payment.id,
+                    target_role="employer",
                 )
 
     log_activity(
@@ -882,6 +885,7 @@ def admin_reject_payment(
                     ),
                     entity_type="payment",
                     entity_id=payment.id,
+                    target_role="employer",
                 )
 
     log_activity(
@@ -1094,6 +1098,7 @@ def admin_disburse_payment(
                 ),
                 entity_type="payment",
                 entity_id=payment.id,
+                target_role="worker",
             )
 
     log_activity(

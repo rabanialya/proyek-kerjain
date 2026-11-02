@@ -35,17 +35,6 @@ function formatRelative(isoString) {
   return formatDate(isoString)
 }
 
-// Tentukan peran aktif untuk navigasi berbasis notifikasi.
-// Admin > Employer > Worker. Pengguna dengan dua profil default ke Employer
-// (keterbatasan: notifikasi worker-side bisa mendarat di rute employer —
-//  halaman tujuan menangani "tidak ditemukan" dengan anggun).
-function getRole(user, profileStatus) {
-  if (user?.is_admin) return 'admin'
-  if (profileStatus?.has_employer_profile) return 'employer'
-  if (profileStatus?.has_worker_profile) return 'worker'
-  return null
-}
-
 // Label singkat untuk entity_type — ditampilkan sebagai konteks pada kartu.
 const ENTITY_LABELS = {
   application: 'Lamaran',
@@ -54,9 +43,13 @@ const ENTITY_LABELS = {
   payment: 'Pembayaran',
 }
 
-// Resolusi entity_type + entity_id → route yang valid di App.jsx.
+// Resolusi entity_type + entity_id + target_role → route yang valid di App.jsx.
 // Mengembalikan string route, atau null jika tidak dapat ditentukan
 // (pemanggil tetap berada di /notifications, tidak membuat URL tidak valid).
+//
+// target_role berasal langsung dari field notifikasi — tidak diturunkan dari
+// profil pengguna, sehingga akun dengan dua profil tetap diarahkan sesuai
+// peran penerima notifikasi tersebut.
 //
 // Catatan pemetaan:
 //  - assignment → detail pekerjaan (worker/employer) langsung pakai entity_id.
@@ -68,34 +61,34 @@ const ENTITY_LABELS = {
 //  - payment (admin) → detail pembayaran; (employer/worker) entity_id adalah
 //    payment id — perlu resolve payment.assignment_id via API agar bisa ke
 //    detail pekerjaan. Gagal resolve → null.
-async function resolveRoute(notification, role) {
-  const { entity_type, entity_id } = notification
-  if (!entity_type || !entity_id) return null
+async function resolveRoute(notification) {
+  const { entity_type, entity_id, target_role } = notification
+  if (!entity_type || !entity_id || !target_role) return null
 
   switch (entity_type) {
     case 'assignment':
-      if (role === 'worker') return `/worker/jobs/${entity_id}`
-      if (role === 'employer') return `/employer/jobs/${entity_id}`
+      if (target_role === 'worker') return `/worker/jobs/${entity_id}`
+      if (target_role === 'employer') return `/employer/jobs/${entity_id}`
       return null
 
     case 'dispute':
-      if (role === 'admin') return `/admin/disputes/${entity_id}`
-      if (role === 'employer') return '/employer/jobs'
-      if (role === 'worker') return '/worker/jobs'
+      if (target_role === 'admin') return `/admin/disputes/${entity_id}`
+      if (target_role === 'employer') return '/employer/jobs'
+      if (target_role === 'worker') return '/worker/jobs'
       return null
 
     case 'application':
-      if (role === 'employer') return '/employer/applications'
-      if (role === 'worker') return '/worker'
+      if (target_role === 'employer') return '/employer/applications'
+      if (target_role === 'worker') return '/worker'
       return null
 
     case 'payment':
-      if (role === 'admin') return `/admin/payments/${entity_id}`
+      if (target_role === 'admin') return `/admin/payments/${entity_id}`
       // Employer/Worker: entity_id adalah payment id — perlu assignment_id.
       try {
         const payment = await fetchPaymentById(entity_id)
         if (payment?.assignment_id) {
-          return role === 'employer'
+          return target_role === 'employer'
             ? `/employer/jobs/${payment.assignment_id}`
             : `/worker/jobs/${payment.assignment_id}`
         }
@@ -221,11 +214,10 @@ export default function NotificationsPage() {
       }
     }
 
-    // Resolve route berdasarkan entity_type + entity_id.
-    const role = getRole(user, profileStatus)
+    // Resolve route berdasarkan target_role + entity_type + entity_id.
     let route = null
     try {
-      route = await resolveRoute(notification, role)
+      route = await resolveRoute(notification)
     } catch {
       route = null
     }
@@ -239,12 +231,16 @@ export default function NotificationsPage() {
 
   const unreadCount = notifications?.filter((n) => !n.is_read).length ?? 0
 
-  // Tombol kembali berdasarkan peran.
+  // Tombol kembali berdasarkan peran. Untuk akun dengan dua profil, gunakan
+  // urutan admin > worker > employer agar tidak selalu mengarah ke Employer
+  // hanya karena profil Employer tersedia.
   const backTo = user?.is_admin
     ? '/admin'
-    : profileStatus?.has_employer_profile
-      ? '/employer'
-      : '/worker'
+    : profileStatus?.has_worker_profile
+      ? '/worker'
+      : profileStatus?.has_employer_profile
+        ? '/employer'
+        : '/'
 
   // ── Loading ──
   if (notifications === null && !error) {

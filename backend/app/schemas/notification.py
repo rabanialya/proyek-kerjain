@@ -11,5 +11,6 @@ class NotificationResponse(BaseModel):
     message: str
     entity_type: str | None = None
     entity_id: UUID | None = None
+    target_role: str | None = None
     is_read: bool
     created_at: datetime

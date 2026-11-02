@@ -28,6 +28,7 @@ def test_create_notification_sets_fields_and_defaults(db_session):
         message="Employer menerima lamaran Anda",
         entity_type="application",
         entity_id=entity_id,
+        target_role="employer",
     )
 
     assert n.user_id == user_id
@@ -35,6 +36,7 @@ def test_create_notification_sets_fields_and_defaults(db_session):
     assert n.message == "Employer menerima lamaran Anda"
     assert n.entity_type == "application"
     assert n.entity_id == entity_id
+    assert n.target_role == "employer"
     assert n.is_read is False  # default model
     assert n.created_at is not None
 
@@ -46,12 +48,92 @@ def test_create_notification_minimal_without_entity(db_session):
 
     assert n.entity_type is None
     assert n.entity_id is None
+    assert n.target_role is None  # nullable untuk data lama
     db_session.commit()
 
     rows = db_session.exec(
         select(Notification).where(Notification.user_id == user_id)
     ).all()
     assert len(rows) == 1
+
+
+def test_create_notification_target_role_worker(db_session):
+    """target_role 'worker' tersimpan dengan benar."""
+    user_id = uuid4()
+    n = create_notification(
+        db_session,
+        user_id=user_id,
+        title="Ditugaskan",
+        message="Anda ditugaskan",
+        entity_type="assignment",
+        entity_id=uuid4(),
+        target_role="worker",
+    )
+    assert n.target_role == "worker"
+    db_session.commit()
+    row = db_session.exec(
+        select(Notification).where(Notification.user_id == user_id)
+    ).first()
+    assert row.target_role == "worker"
+
+
+def test_create_notification_target_role_employer(db_session):
+    """target_role 'employer' tersimpan dengan benar."""
+    user_id = uuid4()
+    n = create_notification(
+        db_session,
+        user_id=user_id,
+        title="Lamaran baru",
+        message="Ada lamaran baru",
+        entity_type="application",
+        entity_id=uuid4(),
+        target_role="employer",
+    )
+    assert n.target_role == "employer"
+    db_session.commit()
+    row = db_session.exec(
+        select(Notification).where(Notification.user_id == user_id)
+    ).first()
+    assert row.target_role == "employer"
+
+
+def test_create_notification_target_role_admin(db_session):
+    """target_role 'admin' tersimpan dengan benar."""
+    user_id = uuid4()
+    n = create_notification(
+        db_session,
+        user_id=user_id,
+        title="Perlu verifikasi",
+        message="Ada pembayaran perlu diverifikasi",
+        entity_type="payment",
+        entity_id=uuid4(),
+        target_role="admin",
+    )
+    assert n.target_role == "admin"
+    db_session.commit()
+    row = db_session.exec(
+        select(Notification).where(Notification.user_id == user_id)
+    ).first()
+    assert row.target_role == "admin"
+
+
+def test_create_notification_target_role_null_for_legacy(db_session):
+    """Data lama tanpa target_role tidak menyebabkan kegagalan validasi."""
+    user_id = uuid4()
+    # Simulasi data lama: tidak mengisi target_role sama sekali.
+    n = create_notification(
+        db_session,
+        user_id=user_id,
+        title="Notif lama",
+        message="Data sebelum migrasi",
+    )
+    assert n.target_role is None
+    db_session.commit()
+    row = db_session.exec(
+        select(Notification).where(Notification.user_id == user_id)
+    ).first()
+    assert row is not None
+    assert row.target_role is None
 
 
 def test_create_notification_visible_in_same_session_via_autoflush(db_session):
@@ -189,6 +271,7 @@ def test_helper_signatures_are_structured_only():
     notif_params = set(inspect.signature(notifications.create_notification).parameters)
     assert notif_params == {
         "session", "user_id", "title", "message", "entity_type", "entity_id",
+        "target_role",
     }
 
     log_params = set(inspect.signature(activity_logging.log_activity).parameters)

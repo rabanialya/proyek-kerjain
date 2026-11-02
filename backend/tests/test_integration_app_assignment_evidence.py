@@ -137,6 +137,7 @@ def test_worker_apply_notifies_employer(client_for, base):
     assert emp_notifs[0]["entity_type"] == "application"
     assert emp_notifs[0]["entity_id"] == app_id
     assert emp_notifs[0]["is_read"] is False
+    assert emp_notifs[0]["target_role"] == "employer"
     assert base.employer_user.id != base.worker_user.id  # penerima bukan actor
 
     # Worker mencatat activity log (actor = worker).
@@ -159,6 +160,7 @@ def test_employer_accept_notifies_worker(client_for, base):
     w_notifs = _notifs(client_for, base.worker_user)
     assert len(w_notifs) == 1
     assert "diterima" in w_notifs[0]["title"].lower()
+    assert w_notifs[0]["target_role"] == "worker"
 
     # Employer mencatat log keputusan (actor = employer), dengan old/new.
     e_logs = _logs(client_for, base.employer_user)
@@ -176,6 +178,7 @@ def test_employer_reject_notifies_worker(client_for, base):
     w_notifs = _notifs(client_for, base.worker_user)
     assert len(w_notifs) == 1
     assert "ditolak" in w_notifs[0]["title"].lower()
+    assert w_notifs[0]["target_role"] == "worker"
 
     e_logs = _logs(client_for, base.employer_user)
     decision = [l for l in e_logs if l["action"] == "update_application_status"]
@@ -196,6 +199,7 @@ def test_create_assignment_notifies_worker(client_for, base):
     assert len(assignment_notifs) == 1
     assert "ditugaskan" in assignment_notifs[0]["title"].lower()
     assert assignment_notifs[0]["entity_id"] == assignment_id
+    assert assignment_notifs[0]["target_role"] == "worker"
 
     # Employer mencatat log (actor = employer).
     e_logs = _logs(client_for, base.employer_user)
@@ -250,6 +254,7 @@ def test_worker_submit_notifies_employer(client_for, base, monkeypatch, tmp_path
     assert len(sub_notifs) == 1
     assert "hasil" in sub_notifs[0]["title"].lower() or "dikirim" in sub_notifs[0]["title"].lower()
     assert sub_notifs[0]["entity_id"] == assignment_id
+    assert sub_notifs[0]["target_role"] == "employer"
 
     # Worker mencatat log in_progress dan submitted.
     w_logs = _logs(client_for, base.worker_user)

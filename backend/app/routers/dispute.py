@@ -161,6 +161,7 @@ def create_dispute(
         ),
         entity_type="dispute",
         entity_id=dispute.id,
+        target_role="worker",
     )
     log_activity(
         session,

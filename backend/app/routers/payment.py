@@ -463,6 +463,7 @@ def upload_transfer_proof(
             ),
             entity_type="payment",
             entity_id=payment.id,
+            target_role="admin",
         )
 
     log_activity(

@@ -30,6 +30,7 @@ def create_notification(
     message: str,
     entity_type: str | None = None,
     entity_id: UUID | None = None,
+    target_role: str | None = None,
 ) -> Notification:
     """Buat satu notifikasi untuk ``user_id`` dan tambahkan ke ``session``.
 
@@ -37,6 +38,11 @@ def create_notification(
     event). ``entity_type``/``entity_id`` bersifat opsional — dipakai untuk
     menautkan notifikasi ke entitas terkait (mis. ``"application"``, task_id)
     bila relevan.
+
+    ``target_role`` menentukan peran penerima: ``"worker"``, ``"employer"``,
+    atau ``"admin"``. Wajib diisi untuk notifikasi baru agar frontend dapat
+    mengarahkan navigasi ke halaman yang sesuai. Nullable untuk kompatibilitas
+    dengan data notifikasi lama.
 
     Mengembalikan objek ``Notification`` yang sudah ditambahkan ke session namun
     BELUM di-commit. Field ``is_read`` diisi ``False`` sesuai default model.
@@ -48,6 +54,7 @@ def create_notification(
         message=message,
         entity_type=entity_type,
         entity_id=entity_id,
+        target_role=target_role,
     )
     session.add(notification)
     return notification

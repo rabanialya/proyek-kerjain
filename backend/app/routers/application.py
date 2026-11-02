@@ -136,6 +136,7 @@ def create_application(
         message=f"Ada lamaran baru untuk task \"{task.title}\".",
         entity_type="application",
         entity_id=application.id,
+        target_role="employer",
     )
     log_activity(
         session,
@@ -479,6 +480,7 @@ def update_application_status(
         message=notif_message,
         entity_type="application",
         entity_id=application.id,
+        target_role="worker",
     )
     log_activity(
         session,

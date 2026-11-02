@@ -23,6 +23,11 @@ class Notification(SQLModel, table=True):
     entity_type: str | None = None
     entity_id: UUID | None = None
 
+    # Peran penerima notifikasi: "worker", "employer", atau "admin".
+    # Nullable untuk kompatibilitas dengan data notifikasi lama (sebelum
+    # penambahan kolom ini). Notifikasi baru wajib mengisi target_role.
+    target_role: str | None = None
+
     is_read: bool = Field(default=False)
 
     created_at: datetime = Field(

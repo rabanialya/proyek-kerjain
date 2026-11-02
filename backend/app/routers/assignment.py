@@ -140,6 +140,7 @@ def create_assignment(
         ),
         entity_type="assignment",
         entity_id=assignment.id,
+        target_role="worker",
     )
     log_activity(
         session,
@@ -755,6 +756,7 @@ def update_assignment_status(
                 ),
                 entity_type="assignment",
                 entity_id=assignment.id,
+                target_role="employer",
             )
             log_activity(
                 session,

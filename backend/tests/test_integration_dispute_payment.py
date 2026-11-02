@@ -201,6 +201,7 @@ def test_open_dispute_notifies_worker(client_for, base, monkeypatch, tmp_path):
                         if n["entity_type"] == "dispute"]
     assert len(w_dispute_notifs) == 1
     assert w_dispute_notifs[0]["entity_id"] == dispute_id
+    assert w_dispute_notifs[0]["target_role"] == "worker"
 
     # Employer (pembuka) TIDAK diberi tahu oleh create_dispute.
     e_dispute_notifs = [n for n in _notifs(client_for, base.employer_user)
@@ -253,6 +254,12 @@ def test_resolve_dispute_approve_work(client_for, base, monkeypatch, tmp_path):
     w_latest = [n for n in _notifs(client_for, base.worker_user)
                 if n["entity_type"] == "dispute"][0]  # newest first
     assert "diterima" in w_latest["message"].lower()
+    assert w_latest["target_role"] == "worker"
+
+    # target_role Employer juga benar.
+    e_latest = [n for n in _notifs(client_for, base.employer_user)
+                if n["entity_type"] == "dispute"][0]
+    assert e_latest["target_role"] == "employer"
 
     # Admin mencatat log resolve_dispute; worker tidak.
     assert any(l["action"] == "resolve_dispute" for l in _logs(client_for, base.admin_user))
@@ -332,6 +339,7 @@ def test_upload_transfer_proof_notifies_admin(client_for, base, monkeypatch, tmp
     assert len(admin_pay_notifs) == 1
     assert "verifikasi" in admin_pay_notifs[0]["title"].lower()
     assert admin_pay_notifs[0]["entity_id"] == work_payment_id
+    assert admin_pay_notifs[0]["target_role"] == "admin"
 
     # Employer tidak diberi notifikasi oleh upload proof (notif ditujukan ke admin).
     e_pay_notifs = [n for n in _notifs(client_for, base.employer_user)
@@ -365,6 +373,7 @@ def test_verify_payment_notifies_employer(client_for, base, monkeypatch, tmp_pat
                     if n["entity_type"] == "payment"]
     assert len(e_pay_notifs) == 1
     assert "diverifikasi" in e_pay_notifs[0]["title"].lower()
+    assert e_pay_notifs[0]["target_role"] == "employer"
 
     # Admin mencatat log verify_payment.
     assert any(l["action"] == "verify_payment" for l in _logs(client_for, base.admin_user))
@@ -394,6 +403,7 @@ def test_reject_payment_notifies_employer_with_reason(client_for, base, monkeypa
     msg = e_pay_notifs[0]["message"].lower()
     assert "ditolak" in msg
     assert reason.lower() in msg  # alasan aman ikut ditampilkan
+    assert e_pay_notifs[0]["target_role"] == "employer"
 
     # Admin mencatat log reject_payment.
     assert any(l["action"] == "reject_payment" for l in _logs(client_for, base.admin_user))
@@ -451,6 +461,7 @@ def test_disburse_notifies_worker(client_for, base, monkeypatch, tmp_path):
                     if n["entity_type"] == "payment"]
     assert len(w_pay_notifs) == 1
     assert "pencairan" in w_pay_notifs[0]["title"].lower()
+    assert w_pay_notifs[0]["target_role"] == "worker"
 
     # Admin mencatat log disburse_payment.
     assert any(l["action"] == "disburse_payment" for l in _logs(client_for, base.admin_user))
@@ -490,3 +501,88 @@ def test_unrelated_user_receives_nothing(client_for, base, monkeypatch, tmp_path
     other = make_user(name="Lain")
     assert _notifs(client_for, other) == []
     assert _logs(client_for, other) == []
+
+
+# ── target_role: akun dengan dua profil diarahkan sesuai notifikasi ──────────
+
+def test_dual_profile_worker_notification_has_worker_role(client_for, base, db_session, monkeypatch, tmp_path):
+    """Akun dengan dua profil (Worker + Employer) yang menerima notifikasi
+    sebagai Worker memiliki target_role='worker', bukan 'employer'."""
+    # Tambahkan EmployerProfile ke worker_user sehingga ia punya dua profil.
+    dual_employer_profile = EmployerProfile(
+        user_id=base.worker_user.id,
+        display_name="WorkerAlsoEmployer"
+    )
+    db_session.add(dual_employer_profile)
+    db_session.commit()
+
+    # Jalankan alur: Worker melamar → Employer menerima lamaran → buat assignment.
+    # Notifikasi ke Worker (target_role=worker) harus tetap 'worker' meski
+    # worker_user sekarang juga punya EmployerProfile.
+    we = tmp_path / "we"
+    monkeypatch.setattr("app.routers.work_evidence.UPLOAD_DIR", we)
+
+    app_id = _apply(client_for, base)
+    _accept(client_for, base, app_id)
+    assignment_id = _create_assignment(client_for, base, app_id)
+
+    w_notifs = _notifs(client_for, base.worker_user)
+    assignment_notifs = [n for n in w_notifs if n["entity_type"] == "assignment"]
+    assert len(assignment_notifs) == 1
+    # target_role harus 'worker' meski penerima juga punya profil Employer.
+    assert assignment_notifs[0]["target_role"] == "worker"
+
+
+def test_dual_profile_employer_notification_has_employer_role(client_for, base, db_session, monkeypatch, tmp_path):
+    """Akun dengan dua profil (Worker + Employer) yang menerima notifikasi
+    sebagai Employer memiliki target_role='employer', bukan 'worker'."""
+    # Tambahkan WorkerProfile ke employer_user sehingga ia punya dua profil.
+    dual_worker_profile = WorkerProfile(
+        user_id=base.employer_user.id,
+        nickname="EmployerAlsoWorker"
+    )
+    db_session.add(dual_worker_profile)
+    db_session.commit()
+
+    # Notifikasi ke Employer (target_role=employer) harus tetap 'employer'
+    # meski employer_user sekarang juga punya WorkerProfile.
+    we = tmp_path / "we"
+    monkeypatch.setattr("app.routers.work_evidence.UPLOAD_DIR", we)
+
+    app_id = _apply(client_for, base)
+
+    e_notifs = _notifs(client_for, base.employer_user)
+    app_notifs = [n for n in e_notifs if n["entity_type"] == "application"]
+    assert len(app_notifs) == 1
+    # target_role harus 'employer' meski penerima juga punya profil Worker.
+    assert app_notifs[0]["target_role"] == "employer"
+
+
+# ── Kepemilikan notifikasi: pengguna lain tidak bisa membaca ─────────────────
+
+def test_user_cannot_read_other_users_notification(client_for, base, monkeypatch, tmp_path, make_user):
+    """Pengguna tidak dapat membaca notifikasi milik pengguna lain
+    melalui endpoint GET /notifications/{id}."""
+    we = tmp_path / "we"
+    monkeypatch.setattr("app.routers.work_evidence.UPLOAD_DIR", we)
+
+    # Worker melamar → Employer menerima notifikasi (target_role=employer).
+    _apply(client_for, base)
+    emp_notifs = _notifs(client_for, base.employer_user)
+    assert len(emp_notifs) == 1
+    notif_id = emp_notifs[0]["id"]
+
+    # Pengguna lain yang mencoba membaca notifikasi Employer harus ditolak 403.
+    other_user = make_user(name="Penyusup")
+    r = client_for(other_user).get(f"/notifications/{notif_id}")
+    assert r.status_code == 403
+
+    # Worker (bukan pemilik notifikasi ini) juga ditolak 403.
+    r = client_for(base.worker_user).get(f"/notifications/{notif_id}")
+    assert r.status_code == 403
+
+    # Pemilik asli (Employer) bisa membaca notifikasinya sendiri.
+    r = client_for(base.employer_user).get(f"/notifications/{notif_id}")
+    assert r.status_code == 200
+    assert r.json()["id"] == notif_id
+    assert r.json()["target_role"] == "employer"
