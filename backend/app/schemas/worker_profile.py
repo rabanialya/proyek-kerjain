@@ -140,11 +140,35 @@ class WorkerProfileUpdate(WorkerProfileCreate):
     """
     Schema update profil Worker.
 
-    Mewarisi semua field dan validator dari WorkerProfileCreate.
-    Semua field opsional — router menggunakan model_dump(exclude_unset=True)
-    sehingga hanya field yang dikirim dalam request yang diperbarui.
+    Mewarisi semua field dari WorkerProfileCreate.
+    Validator di-override untuk bersikap lenient terhadap nilai invalid:
+    nilai yang tidak dikenal di-filter (bukan ditolak), sehingga data lama
+    di DB tidak memblok proses save.
+    Semua field opsional — router menggunakan model_dump(exclude_unset=True).
     """
-    pass
+
+    @field_validator("preferensi_shift", mode="before")
+    @classmethod
+    def validate_preferensi_shift(cls, v):  # type: ignore[override]
+        if v is None:
+            return v
+        normalized = [x.lower() for x in v]
+        return [x for x in normalized if x in VALID_PREFERENSI_SHIFT]
+
+    @field_validator("hari_tersedia", mode="before")
+    @classmethod
+    def validate_hari_tersedia(cls, v):  # type: ignore[override]
+        if v is None:
+            return v
+        return [x for x in v if x in VALID_HARI]
+
+    @field_validator("accepted_payment_methods", mode="before")
+    @classmethod
+    def validate_payment_methods(cls, v):  # type: ignore[override]
+        if v is None:
+            return v
+        normalized = [x.lower() for x in v]
+        return [x for x in normalized if x in VALID_PAYMENT_METHODS]
 
 
 # ── Schema Response — Worker ───────────────────────────────────────────────────
