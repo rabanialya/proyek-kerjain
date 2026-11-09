@@ -21,7 +21,7 @@ from pydantic import BaseModel, Field, field_validator
 # Nilai valid untuk work_type dan wage_rate.
 # Digunakan juga di router untuk validasi kondisional.
 VALID_WORK_TYPES = {"remote", "on_site", "hybrid"}
-VALID_WAGE_RATES = {"project", "hourly", "daily", "per_output"}
+VALID_WAGE_RATES = {"project", "hourly", "daily", "per_output", "monthly"}
 VALID_REQUIREMENT_FLAGS = {
     "own_vehicle",
     "own_device",

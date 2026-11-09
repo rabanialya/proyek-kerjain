@@ -16,4 +16,7 @@ class Category(SQLModel, table=True):
         index=True
     )
 
+    description: str | None = Field(default=None)
+    """Deskripsi opsional kategori, dikelola oleh Admin."""
+
     is_active: bool = Field(default=True)
