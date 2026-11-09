@@ -17,16 +17,31 @@ class Report(SQLModel, table=True):
         index=True
     )
 
+    # Target laporan: pengguna atau task (salah satu atau kosong)
     reported_user_id: UUID | None = Field(
         default=None,
         foreign_key="users.id",
         index=True
     )
 
+    reported_task_id: UUID | None = Field(
+        default=None,
+        foreign_key="tasks.id",
+        index=True
+    )
+
+    # Kategori/alasan laporan (pilihan enum string)
+    # fraud | wrong_info | inappropriate | spam | rule_violation | other
+    reason_category: str | None = Field(default=None)
+
     subject: str
     description: str
 
+    # Status: open | pending | under_review | resolved | rejected
     status: str = Field(default="open")
+
+    # Catatan Admin saat menangani laporan
+    admin_notes: str | None = Field(default=None)
 
     resolution: str | None = None
 

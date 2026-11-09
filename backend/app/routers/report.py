@@ -4,13 +4,13 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlmodel import Session, select
 
 from app.models.report import Report
+from app.models.task import Task
 from app.models.user import User
-
 from app.schemas.report import (
     ReportCreate,
     ReportResponse,
+    VALID_REASON_CATEGORIES,
 )
-
 from app.utils.dependencies import (
     get_current_user,
     get_session,
@@ -37,38 +37,52 @@ def create_report(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    # -----------------------------------------------------
-    # Jika report ditujukan kepada user tertentu,
-    # pastikan user tersebut memang ada
-    # -----------------------------------------------------
+    """
+    Pengguna membuat laporan baru.
 
-    if report_data.reported_user_id:
-
-        reported_user = session.get(
-            User,
-            report_data.reported_user_id
+    Ketentuan:
+    - Tidak boleh melaporkan diri sendiri.
+    - reason_category harus salah satu nilai valid jika diisi.
+    - reported_task_id harus merujuk ke task yang ada jika diisi.
+    """
+    # Validasi reason_category
+    if report_data.reason_category and report_data.reason_category not in VALID_REASON_CATEGORIES:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Kategori laporan tidak valid. Pilihan: "
+                f"{', '.join(sorted(VALID_REASON_CATEGORIES))}"
+            )
         )
 
+    # Jika laporan ditujukan ke user tertentu — validasi keberadaan & self-report
+    if report_data.reported_user_id:
+        reported_user = session.get(User, report_data.reported_user_id)
         if not reported_user:
             raise HTTPException(
                 status_code=404,
                 detail="User yang dilaporkan tidak ditemukan"
             )
-
-        # Tidak boleh melaporkan diri sendiri
         if reported_user.id == current_user.id:
             raise HTTPException(
                 status_code=400,
                 detail="Anda tidak dapat melaporkan diri sendiri"
             )
 
-    # -----------------------------------------------------
-    # Buat report
-    # -----------------------------------------------------
+    # Jika laporan ditujukan ke task tertentu — validasi keberadaan
+    if report_data.reported_task_id:
+        task = session.get(Task, report_data.reported_task_id)
+        if not task:
+            raise HTTPException(
+                status_code=404,
+                detail="Task yang dilaporkan tidak ditemukan"
+            )
 
     report = Report(
         reported_by=current_user.id,
         reported_user_id=report_data.reported_user_id,
+        reported_task_id=report_data.reported_task_id,
+        reason_category=report_data.reason_category,
         subject=report_data.subject,
         description=report_data.description,
         status="open",
@@ -94,11 +108,10 @@ def get_my_reports(
     session: Session = Depends(get_session),
 ):
     reports = session.exec(
-        select(Report).where(
-            Report.reported_by == current_user.id
-        )
+        select(Report)
+        .where(Report.reported_by == current_user.id)
+        .order_by(Report.created_at.desc())
     ).all()
-
     return reports
 
 
@@ -115,10 +128,7 @@ def get_report(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session),
 ):
-    report = session.get(
-        Report,
-        report_id
-    )
+    report = session.get(Report, report_id)
 
     if not report:
         raise HTTPException(
@@ -126,11 +136,7 @@ def get_report(
             detail="Report tidak ditemukan"
         )
 
-    # -----------------------------------------------------
-    # Untuk sementara hanya pembuat report yang bisa
-    # melihat detail report
-    # -----------------------------------------------------
-
+    # Hanya pembuat laporan yang bisa melihat detail laporan miliknya
     if report.reported_by != current_user.id:
         raise HTTPException(
             status_code=403,
