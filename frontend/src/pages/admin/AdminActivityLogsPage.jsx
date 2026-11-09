@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { CheckCircle2, XCircle, ArrowRight, Scale, RefreshCw } from 'lucide-react'
 import { adminFetchActivityLogs, adminFetchActivityLogDetail } from '../../lib/api'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -61,22 +62,22 @@ const ACTION_CONFIG = {
   verify_payment: {
     label: 'Verifikasi Pembayaran',
     cls: 'bg-green-100 text-green-700',
-    icon: '✓',
+    icon: CheckCircle2,
   },
   reject_payment: {
     label: 'Tolak Bukti Transfer',
     cls: 'bg-red-100 text-red-700',
-    icon: '✕',
+    icon: XCircle,
   },
   disburse_payment: {
     label: 'Pencairan ke Worker',
     cls: 'bg-blue-100 text-blue-700',
-    icon: '→',
+    icon: ArrowRight,
   },
   resolve_dispute: {
     label: 'Selesaikan Dispute',
     cls: 'bg-purple-100 text-purple-700',
-    icon: '⚖',
+    icon: Scale,
   },
 }
 
@@ -98,11 +99,12 @@ function ActionBadge({ action }) {
   const cfg = ACTION_CONFIG[action] ?? {
     label: action,
     cls: 'bg-slate-100 text-slate-600',
-    icon: '·',
+    icon: null,
   }
+  const Icon = cfg.icon
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${cfg.cls}`}>
-      <span>{cfg.icon}</span>
+      {Icon && <Icon size={11} />}
       {cfg.label}
     </span>
   )
@@ -129,7 +131,7 @@ function LogDetail({ log, onClose }) {
           onClick={onClose}
           className="rounded-lg px-2 py-1 text-xs text-blue-600 hover:bg-blue-100"
         >
-          Tutup ✕
+          Tutup
         </button>
       </div>
 
@@ -283,9 +285,10 @@ export default function AdminActivityLogsPage() {
         <button
           onClick={loadLogs}
           disabled={loading}
-          className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition hover:border-blue-300 hover:text-blue-600 disabled:opacity-50"
+          className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition hover:border-blue-300 hover:text-blue-600 disabled:opacity-50 flex items-center gap-2"
         >
-          {loading ? 'Memuat…' : '↻ Refresh'}
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          {loading ? 'Memuat…' : 'Refresh'}
         </button>
       </div>
 
@@ -338,7 +341,7 @@ export default function AdminActivityLogsPage() {
               onClick={() => { setActionFilter(''); setEntityFilter(''); setExpandedId(null) }}
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-400 hover:text-slate-700"
             >
-              ✕ Reset
+              Reset Filter
             </button>
           )}
         </div>

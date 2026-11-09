@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { CheckCircle2, XCircle, ArrowDownToLine, AlertTriangle } from 'lucide-react'
 import {
   adminFetchPaymentDetail,
   adminVerifyPayment,
@@ -169,7 +170,7 @@ function SecureFilePanel({ paymentId, fetchFn, emptyLabel }) {
 
 // ─── Dialog konfirmasi generik ────────────────────────────────────────────
 
-function ConfirmDialog({ isOpen, title, description, children, onCancel, onConfirm, loading, confirmLabel, confirmCls }) {
+function ConfirmDialog({ isOpen, title, description, children, onCancel, onConfirm, loading, confirmLabel, confirmCls, confirmDisabled }) {
   if (!isOpen) return null
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -187,8 +188,8 @@ function ConfirmDialog({ isOpen, title, description, children, onCancel, onConfi
           </button>
           <button
             onClick={onConfirm}
-            disabled={loading}
-            className={`rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${confirmCls ?? 'bg-blue-600 hover:bg-blue-700'}`}
+            disabled={loading || confirmDisabled}
+            className={`rounded-xl px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed ${confirmCls ?? 'bg-blue-600 hover:bg-blue-700'}`}
           >
             {loading ? 'Memproses…' : confirmLabel}
           </button>
@@ -205,7 +206,9 @@ function DisburseInfoPanel({ payment }) {
 
   return (
     <div className="rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 space-y-3">
-      <h2 className="text-sm font-semibold text-blue-700">✓ Pencairan ke Worker Selesai</h2>
+      <h2 className="text-sm font-semibold text-blue-700 flex items-center gap-1.5">
+        <CheckCircle2 size={14} /> Pencairan ke Worker Selesai
+      </h2>
       <dl className="divide-y divide-blue-100">
         <InfoRow label="Nominal Dicairkan" value={formatCurrency(payment.amount)} />
         <InfoRow label="Waktu Konfirmasi" value={formatDate(payment.disbursed_at ?? payment.paid_at)} />
@@ -350,25 +353,25 @@ function ActionPanel({ payment, onSuccess }) {
           {canVerify && (
             <button
               onClick={() => { setDialog('verify'); setActionError(null) }}
-              className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700"
+              className="rounded-xl bg-green-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-green-700 flex items-center gap-2"
             >
-              ✓ Verifikasi Dana Masuk
+              <CheckCircle2 size={14} /> Verifikasi Dana Masuk
             </button>
           )}
           {canReject && (
             <button
               onClick={() => { setDialog('reject'); setActionError(null) }}
-              className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700"
+              className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-700 flex items-center gap-2"
             >
-              ✕ Tolak Bukti Transfer
+              <XCircle size={14} /> Tolak Bukti Transfer
             </button>
           )}
           {canDisburse && (
             <button
               onClick={() => { setDialog('disburse'); setActionError(null) }}
-              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700"
+              className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-700 flex items-center gap-2"
             >
-              💸 Catat Pencairan ke Worker
+              <ArrowDownToLine size={14} /> Catat Pencairan ke Worker
             </button>
           )}
         </div>
@@ -452,13 +455,15 @@ function ActionPanel({ payment, onSuccess }) {
         loading={actionLoading}
         confirmLabel="Konfirmasi Pencairan"
         confirmCls="bg-blue-600 hover:bg-blue-700"
+        confirmDisabled={!disburseRef.trim() || !disburseFile}
       >
         <div className="space-y-4">
           {/* Peringatan penting */}
-          <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
-            ⚠️ <strong>Perhatian:</strong> Lakukan transfer ke rekening Worker terlebih dahulu di luar aplikasi.
+          <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 flex items-start gap-2">
+            <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+            <span><strong>Perhatian:</strong> Lakukan transfer ke rekening Worker terlebih dahulu di luar aplikasi.
             Isi form ini <em>setelah</em> transfer benar-benar selesai dilakukan.
-            Status akan berubah menjadi <strong>Dicairkan</strong> setelah dikonfirmasi dan tidak dapat dibatalkan.
+            Status akan berubah menjadi <strong>Dicairkan</strong> setelah dikonfirmasi dan tidak dapat dibatalkan.</span>
           </div>
 
           {/* Ringkasan nominal */}
@@ -473,24 +478,30 @@ function ActionPanel({ payment, onSuccess }) {
             </div>
           )}
 
-          {/* Referensi transaksi */}
+          {/* Referensi transaksi — wajib */}
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-600">
-              Referensi Transaksi Bank <span className="text-slate-400">(opsional)</span>
+              Referensi Transaksi Bank <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
               value={disburseRef}
               onChange={(e) => setDisburseRef(e.target.value)}
               placeholder="Contoh: TRF-20261023-0001 atau nomor referensi bank"
-              className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
+              className={`w-full rounded-xl border px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-200 ${
+                disburseRef.trim() ? 'border-slate-200' : 'border-red-300 bg-red-50'
+              }`}
             />
+            {!disburseRef.trim() && (
+              <p className="mt-1 text-xs text-red-500">Wajib diisi sebelum konfirmasi.</p>
+            )}
           </div>
 
-          {/* Upload bukti transfer keluar */}
+          {/* Upload bukti transfer keluar — wajib */}
           <div>
             <label className="mb-1 block text-xs font-medium text-slate-600">
-              Bukti Transfer Keluar <span className="text-slate-400">(opsional — JPG, PNG, WEBP, PDF, maks 10 MB)</span>
+              Bukti Transfer Keluar <span className="text-red-500">*</span>{' '}
+              <span className="text-slate-400 font-normal">(JPG, PNG, WEBP, PDF, maks 10 MB)</span>
             </label>
             <input
               ref={disburseFileRef}
@@ -500,11 +511,13 @@ function ActionPanel({ payment, onSuccess }) {
               disabled={actionLoading}
               className="block w-full text-sm text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-blue-50 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-blue-700 hover:file:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-60"
             />
-            {disburseFile && (
+            {disburseFile ? (
               <p className="mt-1 text-xs text-slate-600">
                 File dipilih: <span className="font-medium">{disburseFile.name}</span>{' '}
                 <span className="text-slate-400">({(disburseFile.size / 1024 / 1024).toFixed(2)} MB)</span>
               </p>
+            ) : (
+              <p className="mt-1 text-xs text-red-500">Wajib dilampirkan sebelum konfirmasi.</p>
             )}
             {disburseFileError && (
               <p className="mt-1 text-xs text-red-500">{disburseFileError}</p>
@@ -655,8 +668,9 @@ export default function AdminPaymentDetailPage() {
       {/* Bukti transfer masuk (Employer → Platform) */}
       <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4">
         <h2 className="mb-3 text-sm font-semibold text-slate-700">Bukti Transfer Masuk (Employer → Platform)</h2>
-        <div className="mb-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
-          ⚠️ Verifikasi manual ke rekening platform diperlukan sebelum mengklik tombol Verifikasi.
+        <div className="mb-3 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700 flex items-start gap-2">
+          <AlertTriangle size={13} className="mt-0.5 shrink-0" />
+          <span>Verifikasi manual ke rekening platform diperlukan sebelum mengklik tombol Verifikasi.</span>
         </div>
         {payment.transfer_proof_url ? (
           <SecureFilePanel

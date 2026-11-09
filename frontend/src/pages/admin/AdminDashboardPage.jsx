@@ -1,5 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
+import {
+  Users,
+  UserCheck,
+  UserX,
+  ClipboardList,
+  Rocket,
+  Folder,
+  CreditCard,
+  Scale,
+  AlertTriangle,
+  Circle,
+  CheckCircle2,
+} from 'lucide-react'
 import { adminFetchStats } from '../../lib/api'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -16,17 +29,23 @@ function formatDate(isoString) {
 }
 
 const ACTION_LABELS = {
-  verify_payment: 'Verifikasi pembayaran',
-  reject_payment: 'Tolak bukti transfer',
-  disburse_payment: 'Pencairan ke Worker',
-  resolve_dispute: 'Selesaikan dispute',
+  verify_payment:      'Verifikasi pembayaran',
+  reject_payment:      'Tolak bukti transfer',
+  disburse_payment:    'Pencairan ke Worker',
+  resolve_dispute:     'Selesaikan dispute',
+  update_user_status:  'Ubah status akun',
+  update_report_status:'Tangani laporan',
+  update_task_status:  'Ubah status task',
 }
 
 const ACTION_COLORS = {
-  verify_payment: 'bg-green-100 text-green-700',
-  reject_payment: 'bg-red-100 text-red-700',
-  disburse_payment: 'bg-blue-100 text-blue-700',
-  resolve_dispute: 'bg-purple-100 text-purple-700',
+  verify_payment:      'bg-green-100 text-green-700',
+  reject_payment:      'bg-red-100 text-red-700',
+  disburse_payment:    'bg-blue-100 text-blue-700',
+  resolve_dispute:     'bg-purple-100 text-purple-700',
+  update_user_status:  'bg-amber-100 text-amber-700',
+  update_report_status:'bg-orange-100 text-orange-700',
+  update_task_status:  'bg-slate-100 text-slate-600',
 }
 
 // ─── Komponen kecil ────────────────────────────────────────────────────────
@@ -35,7 +54,7 @@ function SkeletonBlock({ className }) {
   return <div className={`animate-pulse rounded-xl bg-slate-200 ${className}`} />
 }
 
-function StatCard({ label, value, accent, to, icon }) {
+function StatCard({ label, value, accent, to, icon: Icon }) {
   const accents = {
     slate: 'bg-white border-slate-200 text-slate-700',
     yellow: 'bg-yellow-50 border-yellow-200 text-yellow-800',
@@ -49,7 +68,7 @@ function StatCard({ label, value, accent, to, icon }) {
     <div className={`rounded-2xl border px-5 py-4 ${accents[accent] ?? accents.slate} ${to ? 'transition hover:shadow-md' : ''}`}>
       <div className="flex items-start justify-between gap-2">
         <p className="text-3xl font-bold">{value}</p>
-        {icon && <span className="text-2xl leading-none">{icon}</span>}
+        {Icon && <Icon size={22} className="opacity-50 shrink-0" />}
       </div>
       <p className="mt-1 text-sm font-medium opacity-80">{label}</p>
       {to && (
@@ -161,25 +180,55 @@ export default function AdminDashboardPage() {
                 label="Total Pengguna"
                 value={stats.total_users}
                 accent="slate"
-                icon="👥"
+                icon={Users}
+                to="/admin/users"
               />
               <StatCard
                 label="Pengguna Aktif"
                 value={stats.active_users}
                 accent="green"
-                icon="✅"
+                icon={UserCheck}
+                to="/admin/users"
+              />
+              <StatCard
+                label="Pengguna Nonaktif"
+                value={stats.inactive_users ?? 0}
+                accent={stats.inactive_users > 0 ? 'red' : 'slate'}
+                icon={UserX}
+                to="/admin/users"
               />
               <StatCard
                 label="Total Task"
                 value={stats.total_tasks}
                 accent="slate"
-                icon="📋"
+                icon={ClipboardList}
               />
+            </>
+          ) : null}
+        </div>
+      </section>
+
+      {/* Stat cards — task detail */}
+      <section>
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500">
+          Task
+        </h2>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-2">
+          {loading ? (
+            Array.from({ length: 2 }).map((_, i) => <StatCardSkeleton key={i} />)
+          ) : stats ? (
+            <>
               <StatCard
                 label="Task Published"
                 value={stats.published_tasks}
                 accent="blue"
-                icon="🚀"
+                icon={Rocket}
+              />
+              <StatCard
+                label="Task Lainnya (Draft/Closed)"
+                value={stats.total_tasks - stats.published_tasks}
+                accent="slate"
+                icon={Folder}
               />
             </>
           ) : null}
@@ -191,24 +240,31 @@ export default function AdminDashboardPage() {
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-slate-500">
           Perlu Tindakan
         </h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           {loading ? (
-            Array.from({ length: 2 }).map((_, i) => <StatCardSkeleton key={i} />)
+            Array.from({ length: 3 }).map((_, i) => <StatCardSkeleton key={i} />)
           ) : stats ? (
             <>
               <StatCard
                 label="Pembayaran Menunggu Verifikasi"
                 value={stats.payments_awaiting_verification}
                 accent={stats.payments_awaiting_verification > 0 ? 'yellow' : 'slate'}
-                icon="💳"
+                icon={CreditCard}
                 to="/admin/payments"
               />
               <StatCard
                 label="Dispute Terbuka"
                 value={stats.open_disputes}
                 accent={stats.open_disputes > 0 ? 'red' : 'slate'}
-                icon="⚖️"
+                icon={Scale}
                 to="/admin/disputes"
+              />
+              <StatCard
+                label="Laporan Menunggu Penanganan"
+                value={stats.pending_reports ?? 0}
+                accent={(stats.pending_reports ?? 0) > 0 ? 'red' : 'slate'}
+                icon={AlertTriangle}
+                to="/admin/reports"
               />
             </>
           ) : null}
@@ -226,13 +282,13 @@ export default function AdminDashboardPage() {
               label="Dispute Terbuka"
               value={stats.open_disputes}
               accent="red"
-              icon="🔴"
+              icon={Circle}
             />
             <StatCard
               label="Dispute Selesai"
               value={stats.resolved_disputes}
               accent="green"
-              icon="✔️"
+              icon={CheckCircle2}
             />
           </div>
         </section>

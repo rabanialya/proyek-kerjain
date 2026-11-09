@@ -268,7 +268,7 @@ export default function AdminPaymentsPage() {
               onClick={() => { setStatusFilter(''); setTypeFilter('') }}
               className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-400 hover:text-slate-700"
             >
-              ✕ Reset
+              Reset Filter
             </button>
           )}
         </div>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { CheckCircle2, RotateCcw, XCircle, AlertTriangle } from 'lucide-react'
 import { adminFetchDisputeDetail, adminResolveDispute } from '../../lib/api'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -26,7 +27,7 @@ const DECISIONS = [
     cls: 'border-green-300 bg-green-50',
     activeCls: 'border-green-500 bg-green-100 ring-2 ring-green-300',
     labelCls: 'text-green-800',
-    icon: '✓',
+    icon: CheckCircle2,
   },
   {
     value: 'needs_revision',
@@ -36,7 +37,7 @@ const DECISIONS = [
     cls: 'border-yellow-300 bg-yellow-50',
     activeCls: 'border-yellow-500 bg-yellow-100 ring-2 ring-yellow-300',
     labelCls: 'text-yellow-800',
-    icon: '↩',
+    icon: RotateCcw,
   },
   {
     value: 'reject_work',
@@ -46,7 +47,7 @@ const DECISIONS = [
     cls: 'border-red-300 bg-red-50',
     activeCls: 'border-red-500 bg-red-100 ring-2 ring-red-300',
     labelCls: 'text-red-800',
-    icon: '✕',
+    icon: XCircle,
     warning: true,
   },
 ]
@@ -115,10 +116,11 @@ function ResolvePanel({ dispute, onSuccess }) {
 
         {/* Peringatan reject_work — tidak ada refund otomatis */}
         {dispute.decision === 'reject_work' && (
-          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-            ⚠️ Keputusan ini <strong>tidak menghasilkan refund otomatis</strong>.
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700 flex items-start gap-2">
+            <AlertTriangle size={14} className="mt-0.5 shrink-0" />
+            <span>Keputusan ini <strong>tidak menghasilkan refund otomatis</strong>.
             Kebijakan kompensasi untuk penolakan pekerjaan belum ditetapkan dan perlu
-            ditangani secara manual oleh Admin.
+            ditangani secara manual oleh Admin.</span>
           </div>
         )}
 
@@ -189,15 +191,15 @@ function ResolvePanel({ dispute, onSuccess }) {
               } hover:opacity-90`}
             >
               <div className="flex items-start gap-3">
-                <span className={`mt-0.5 text-lg font-bold ${d.labelCls}`}>{d.icon}</span>
+                <d.icon size={16} className={`mt-0.5 shrink-0 ${d.labelCls}`} />
                 <div>
                   <p className={`text-sm font-semibold ${d.labelCls}`}>{d.label}</p>
                   <p className="mt-0.5 text-xs text-slate-500 leading-relaxed">
                     {d.description}
                   </p>
                   {d.warning && (
-                    <p className="mt-1 text-xs font-semibold text-red-600">
-                      ⚠️ Tidak ada refund otomatis. Tangani kompensasi secara manual.
+                    <p className="mt-1 text-xs font-semibold text-red-600 flex items-center gap-1">
+                      <AlertTriangle size={11} /> Tidak ada refund otomatis. Tangani kompensasi secara manual.
                     </p>
                   )}
                 </div>
@@ -242,8 +244,8 @@ function ResolvePanel({ dispute, onSuccess }) {
             </p>
 
             <div className={`mt-4 rounded-xl border p-4 ${chosenDecision.cls}`}>
-              <p className={`text-sm font-semibold ${chosenDecision.labelCls}`}>
-                {chosenDecision.icon} {chosenDecision.label}
+              <p className={`text-sm font-semibold flex items-center gap-2 ${chosenDecision.labelCls}`}>
+                <chosenDecision.icon size={14} /> {chosenDecision.label}
               </p>
               <p className="mt-1 text-xs text-slate-500">{chosenDecision.description}</p>
             </div>
@@ -254,8 +256,9 @@ function ResolvePanel({ dispute, onSuccess }) {
             </div>
 
             {chosenDecision.warning && (
-              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-700">
-                ⚠️ Tindakan ini <strong>tidak menghasilkan refund otomatis</strong>.
+              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-xs text-amber-700 flex items-center gap-2">
+                <AlertTriangle size={12} className="shrink-0" />
+                <span>Tindakan ini <strong>tidak menghasilkan refund otomatis</strong>.</span>
               </div>
             )}
 
