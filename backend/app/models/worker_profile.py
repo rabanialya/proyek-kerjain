@@ -76,6 +76,22 @@ class WorkerProfile(SQLModel, table=True):
     Contoh: '["cash","transfer_bank","e_wallet"]'.
     """
 
+    # ── Dokumen ────────────────────────────────────────────────────────────
+
+    cv_url: str | None = None
+    """
+    Path relatif ke file CV/Resume yang diunggah Worker.
+    Contoh: '_private_uploads/worker-docs/uuid.pdf'
+    Dilayani melalui GET /files/worker-docs/cv (butuh autentikasi).
+    """
+
+    id_document_url: str | None = None
+    """
+    Path relatif ke file KTP/KTM yang diunggah Worker.
+    Contoh: '_private_uploads/worker-docs/uuid.jpg'
+    Dilayani melalui GET /files/worker-docs/id (butuh autentikasi).
+    """
+
     # ── Sistem ────────────────────────────────────────────────────────────
 
     rating_avg: float = Field(default=0.0)

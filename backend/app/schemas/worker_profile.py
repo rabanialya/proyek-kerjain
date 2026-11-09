@@ -186,6 +186,8 @@ class WorkerProfileResponse(BaseModel):
     hari_tersedia: list[str] | None = None
     tanggal_mulai: date | None = None
     accepted_payment_methods: list[str] | None = None
+    cv_url: str | None = None
+    id_document_url: str | None = None
     rating_avg: float
 
     model_config = {"from_attributes": True}

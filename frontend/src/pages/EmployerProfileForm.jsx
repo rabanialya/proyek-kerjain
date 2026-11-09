@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { apiRequestAuth } from '../lib/api'
+import { apiRequestAuth, uploadAvatar } from '../lib/api'
 
 /**
  * Form pembuatan profil Employer.
@@ -101,6 +101,88 @@ function Field({ label, htmlFor, hint, required, children }) {
 const inputClass =
   'w-full rounded-xl border border-slate-300 px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-emerald-500 focus:ring-4 focus:ring-emerald-100'
 
+// ── Komponen upload avatar ────────────────────────────────────────────────────
+
+function AvatarUploader({ previewUrl, onPreviewChange, onUploaded, fallbackLabel, accentColor = 'emerald' }) {
+  const fileInputRef = useRef(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+
+  function handleFileChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const allowed = ['image/jpeg', 'image/png', 'image/webp']
+    if (!allowed.includes(file.type)) {
+      setUploadError('Format tidak didukung. Pilih file JPG, PNG, atau WEBP.')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError('Ukuran file melebihi 5 MB.')
+      return
+    }
+
+    setUploadError('')
+
+    // Preview langsung dari file lokal
+    const objectUrl = URL.createObjectURL(file)
+    onPreviewChange(objectUrl)
+
+    setUploading(true)
+    uploadAvatar(file)
+      .then((res) => onUploaded?.(res.avatar_url))
+      .catch((err) => {
+        setUploadError(err.message || 'Gagal mengunggah foto.')
+        URL.revokeObjectURL(objectUrl)
+        onPreviewChange(null)
+      })
+      .finally(() => setUploading(false))
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-4">
+        <div className={`relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-full border-2 border-${accentColor}-200 bg-slate-100`}>
+          {previewUrl ? (
+            <img src={previewUrl} alt="Foto profil" className="h-full w-full object-cover" />
+          ) : (
+            <div className={`flex h-full w-full items-center justify-center bg-${accentColor}-100 text-2xl font-bold text-${accentColor}-600`}>
+              {(fallbackLabel || '?')[0].toUpperCase()}
+            </div>
+          )}
+          {uploading && (
+            <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40">
+              <svg className="h-5 w-5 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+              </svg>
+            </div>
+          )}
+        </div>
+        <div className="flex-1">
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+            className={`rounded-xl border border-${accentColor}-300 bg-${accentColor}-50 px-4 py-2 text-sm font-medium text-${accentColor}-700 transition hover:bg-${accentColor}-100 disabled:opacity-50`}
+          >
+            {uploading ? 'Mengunggah...' : previewUrl ? 'Ganti Foto' : 'Pilih Foto'}
+          </button>
+          <p className="mt-1 text-xs text-slate-400">JPG, PNG, atau WEBP · Maks 5 MB</p>
+        </div>
+      </div>
+      {uploadError && <p className="mt-2 text-xs text-red-500">{uploadError}</p>}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+    </div>
+  )
+}
+
 // ── Form utama ────────────────────────────────────────────────────────────────
 
 export default function EmployerProfileForm() {
@@ -108,6 +190,9 @@ export default function EmployerProfileForm() {
   const navigate = useNavigate()
 
   // ── State form ──────────────────────────────────────────────────────────
+
+  // Avatar
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null)
 
   // A. Identitas
   const [displayName, setDisplayName] = useState('')
@@ -261,17 +346,14 @@ export default function EmployerProfileForm() {
                 />
               </Field>
 
-              {/* Logo — ditunda */}
-              <Field
-                label="Logo / foto profil"
-                hint="Upload logo belum tersedia — akan diaktifkan setelah integrasi storage selesai."
-              >
-                <div className="flex items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 text-lg text-slate-400">
-                    🏢
-                  </div>
-                  <p className="text-sm text-slate-400 italic">Belum tersedia</p>
-                </div>
+              {/* Logo / foto profil */}
+              <Field label="Logo / foto profil">
+                <AvatarUploader
+                  previewUrl={avatarPreviewUrl}
+                  onPreviewChange={setAvatarPreviewUrl}
+                  fallbackLabel={displayName}
+                  accentColor="emerald"
+                />
               </Field>
 
               {/* Tagline */}

@@ -1,7 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { fetchMyEmployerProfile, updateEmployerProfile } from '../lib/api'
+import {
+  fetchMyEmployerProfile,
+  fetchMyAvatarUrl,
+  updateEmployerProfile,
+  uploadAvatar,
+} from '../lib/api'
 
 // ── Konstanta pilihan (sama dengan EmployerProfileForm) ───────────────────────
 
@@ -88,6 +93,110 @@ function SkeletonBlock({ className }) {
   return <div className={`animate-pulse rounded-xl bg-slate-200 ${className}`} />
 }
 
+// ── Komponen upload avatar ────────────────────────────────────────────────────
+
+function AvatarUploader({ previewUrl, onUploaded, fallbackLabel, accentColor = 'emerald' }) {
+  const fileInputRef = useRef(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+  const [localPreview, setLocalPreview] = useState(null)
+
+  // localPreview (object URL dari file baru) takes priority over previewUrl (dari server)
+  const displayUrl = localPreview ?? previewUrl
+
+  function handleFileChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validasi sisi klien
+    const allowed = ['image/jpeg', 'image/png', 'image/webp']
+    if (!allowed.includes(file.type)) {
+      setUploadError('Format tidak didukung. Pilih file JPG, PNG, atau WEBP.')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError('Ukuran file melebihi 5 MB.')
+      return
+    }
+
+    setUploadError('')
+
+    // Tampilkan preview langsung
+    const objectUrl = URL.createObjectURL(file)
+    setLocalPreview(objectUrl)
+
+    // Upload ke server
+    setUploading(true)
+    uploadAvatar(file)
+      .then((res) => {
+        onUploaded?.(res.avatar_url)
+      })
+      .catch((err) => {
+        setUploadError(err.message || 'Gagal mengunggah foto.')
+        // Batalkan preview jika upload gagal
+        URL.revokeObjectURL(objectUrl)
+        setLocalPreview(null)
+      })
+      .finally(() => setUploading(false))
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-4">
+        {/* Thumbnail */}
+        <div className={`relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-full border-2 border-${accentColor}-200 bg-slate-100`}>
+          {displayUrl ? (
+            <img
+              src={displayUrl}
+              alt="Foto profil"
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className={`flex h-full w-full items-center justify-center bg-${accentColor}-100 text-2xl font-bold text-${accentColor}-600`}>
+              {(fallbackLabel || '?')[0].toUpperCase()}
+            </div>
+          )}
+          {uploading && (
+            <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40">
+              <svg className="h-5 w-5 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+              </svg>
+            </div>
+          )}
+        </div>
+
+        {/* Tombol pilih foto */}
+        <div className="flex-1">
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+            className={`rounded-xl border border-${accentColor}-300 bg-${accentColor}-50 px-4 py-2 text-sm font-medium text-${accentColor}-700 transition hover:bg-${accentColor}-100 disabled:opacity-50`}
+          >
+            {uploading ? 'Mengunggah...' : displayUrl ? 'Ganti Foto' : 'Pilih Foto'}
+          </button>
+          <p className="mt-1 text-xs text-slate-400">JPG, PNG, atau WEBP · Maks 5 MB</p>
+        </div>
+      </div>
+
+      {/* Error upload */}
+      {uploadError && (
+        <p className="mt-2 text-xs text-red-500">{uploadError}</p>
+      )}
+
+      {/* Input tersembunyi */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+    </div>
+  )
+}
+
 // ── Halaman utama ─────────────────────────────────────────────────────────────
 
 export default function EmployerProfileEditPage() {
@@ -96,6 +205,9 @@ export default function EmployerProfileEditPage() {
 
   const [initialLoading, setInitialLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
+
+  // Avatar state
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null)
 
   // Form state
   const [displayName, setDisplayName] = useState('')
@@ -120,8 +232,11 @@ export default function EmployerProfileEditPage() {
   // ── Load data lama ──────────────────────────────────────────────────────
 
   useEffect(() => {
-    fetchMyEmployerProfile()
-      .then((p) => {
+    Promise.all([
+      fetchMyEmployerProfile(),
+      fetchMyAvatarUrl().catch(() => null), // null jika belum ada foto
+    ])
+      .then(([p, avatarUrl]) => {
         setDisplayName(p.display_name ?? '')
         setTipeEmployer(p.tipe_employer ?? '')
         setSektor(p.sektor ?? '')
@@ -135,6 +250,7 @@ export default function EmployerProfileEditPage() {
         setWorkAddress(p.work_address ?? '')
         setPaymentScheme(p.payment_scheme ?? [])
         setPaymentSchedule(p.payment_schedule ?? '')
+        setAvatarPreviewUrl(avatarUrl)
       })
       .catch((err) => setLoadError(err.message ?? 'Gagal memuat profil.'))
       .finally(() => setInitialLoading(false))
@@ -234,8 +350,19 @@ export default function EmployerProfileEditPage() {
                 Hanya field yang kamu ubah yang akan diperbarui.
               </p>
             </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-600 text-lg font-bold text-white">
-              {(displayName || '?')[0].toUpperCase()}
+            {/* Avatar di header */}
+            <div className="h-12 w-12 overflow-hidden rounded-2xl">
+              {avatarPreviewUrl ? (
+                <img
+                  src={avatarPreviewUrl}
+                  alt="Avatar"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-emerald-600 text-lg font-bold text-white">
+                  {(displayName || '?')[0].toUpperCase()}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -294,17 +421,19 @@ export default function EmployerProfileEditPage() {
               />
             </Field>
 
-            {/* Logo — ditunda */}
-            <Field
-              label="Logo / foto profil"
-              hint="Upload logo belum tersedia. Akan diaktifkan setelah storage dikonfigurasi."
-            >
-              <div className="flex items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3">
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-200 text-slate-400">
-                  🏢
-                </div>
-                <p className="text-sm text-slate-400 italic">Belum tersedia</p>
-              </div>
+            {/* Logo / foto profil — upload langsung */}
+            <Field label="Logo / foto profil">
+              <AvatarUploader
+                previewUrl={avatarPreviewUrl}
+                fallbackLabel={displayName}
+                accentColor="emerald"
+                onUploaded={(newUrl) => {
+                  // newUrl adalah path relatif dari server; reload preview dari blob baru
+                  fetchMyAvatarUrl()
+                    .then((url) => setAvatarPreviewUrl(url))
+                    .catch(() => {})
+                }}
+              />
             </Field>
 
             <Field label="Tagline" htmlFor="tagline" hint="Slogan singkat, 1–2 kalimat.">

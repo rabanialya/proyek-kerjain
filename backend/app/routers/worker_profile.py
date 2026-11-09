@@ -1,6 +1,9 @@
 from datetime import datetime, timezone
+from pathlib import Path
+import uuid as _uuid_module
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel
 from sqlmodel import Session as SQLModelSession, select
 
 from app.models.user import User
@@ -123,3 +126,107 @@ def update_worker_profile(
     session.refresh(profile)
 
     return profile
+
+# ── Dokumen Upload ────────────────────────────────────────────────────────────
+
+_WORKER_DOCS_DIR = Path("_private_uploads") / "worker-docs"
+_WORKER_DOCS_DIR.mkdir(parents=True, exist_ok=True)
+
+_ALLOWED_DOC_TYPES: set[str] = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "application/pdf",
+}
+_MAX_DOC_SIZE_BYTES: int = 10 * 1024 * 1024  # 10 MB
+
+_DOC_EXT_MAP: dict[str, str] = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+    "application/pdf": ".pdf",
+}
+
+# Tipe dokumen yang diizinkan sebagai path parameter
+_VALID_DOC_KINDS = frozenset({"cv", "id"})
+
+
+class DocumentUploadResponse(BaseModel):
+    doc_type: str
+    message: str
+
+
+@router.post(
+    "/documents/{doc_type}",
+    response_model=DocumentUploadResponse,
+    summary="Upload CV/Resume (doc_type=cv) atau KTP/KTM (doc_type=id) milik Worker",
+)
+def upload_worker_document(
+    doc_type: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    session: SQLModelSession = Depends(get_session),
+):
+    """
+    Upload dokumen Worker.
+
+    - `doc_type` harus `cv` (CV/Resume) atau `id` (KTP/KTM).
+    - Format yang diterima: JPEG, PNG, WEBP, PDF.
+    - Ukuran maksimal: 10 MB.
+    - File disimpan di `_private_uploads/worker-docs/` dan dilayani via
+      `GET /files/worker-docs/{doc_type}`.
+    - Worker harus sudah memiliki profil (POST /profiles/worker terlebih dahulu).
+    """
+    if doc_type not in _VALID_DOC_KINDS:
+        raise HTTPException(
+            status_code=400,
+            detail="doc_type tidak valid. Gunakan 'cv' atau 'id'.",
+        )
+
+    if file.content_type not in _ALLOWED_DOC_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Format file tidak didukung. Gunakan JPG, PNG, WEBP, atau PDF.",
+        )
+
+    contents = file.file.read()
+    if len(contents) > _MAX_DOC_SIZE_BYTES:
+        raise HTTPException(
+            status_code=400,
+            detail="Ukuran file melebihi 10 MB.",
+        )
+
+    profile = session.exec(
+        select(WorkerProfile).where(WorkerProfile.user_id == current_user.id)
+    ).first()
+
+    if not profile:
+        raise HTTPException(
+            status_code=404,
+            detail="Worker profile belum dibuat. Buat profil terlebih dahulu.",
+        )
+
+    ext = _DOC_EXT_MAP.get(file.content_type, ".bin")
+    filename = f"{_uuid_module.uuid4()}{ext}"
+    file_path = _WORKER_DOCS_DIR / filename
+
+    with open(file_path, "wb") as f:
+        f.write(contents)
+
+    stored_url = f"_private_uploads/worker-docs/{filename}"
+
+    if doc_type == "cv":
+        profile.cv_url = stored_url
+        label = "CV/Resume"
+    else:
+        profile.id_document_url = stored_url
+        label = "KTP/KTM"
+
+    profile.updated_at = datetime.now(timezone.utc)
+    session.add(profile)
+    session.commit()
+
+    return DocumentUploadResponse(
+        doc_type=doc_type,
+        message=f"{label} berhasil diunggah.",
+    )

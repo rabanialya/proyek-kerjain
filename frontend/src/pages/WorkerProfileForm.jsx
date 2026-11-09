@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { apiRequestAuth } from '../lib/api'
+import { apiRequestAuth, uploadAvatar, uploadWorkerDocument } from '../lib/api'
 
 /**
  * Form pembuatan profil Worker.
@@ -11,7 +11,7 @@ import { apiRequestAuth } from '../lib/api'
  * A. Informasi pribadi (nama/email/phone dari akun — read-only, nickname & domisili bisa diisi)
  * B. Status & ketersediaan
  * C. Keahlian & bio
- * D. Dokumen (ditampilkan tapi upload ditunda — storage belum tersedia)
+ * D. Dokumen (CV/Resume dan KTP/KTM — upload aktif)
  * E. Metode pembayaran
  */
 
@@ -168,6 +168,181 @@ function Field({ label, htmlFor, hint, required, children }) {
   )
 }
 
+// ── Komponen upload avatar ────────────────────────────────────────────────────
+
+function AvatarUploader({ previewUrl, onPreviewChange, onUploaded, fallbackLabel }) {
+  const fileInputRef = useRef(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+
+  function handleFileChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    const allowed = ['image/jpeg', 'image/png', 'image/webp']
+    if (!allowed.includes(file.type)) {
+      setUploadError('Format tidak didukung. Pilih file JPG, PNG, atau WEBP.')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError('Ukuran file melebihi 5 MB.')
+      return
+    }
+
+    setUploadError('')
+
+    const objectUrl = URL.createObjectURL(file)
+    onPreviewChange(objectUrl)
+
+    setUploading(true)
+    uploadAvatar(file)
+      .then((res) => onUploaded?.(res.avatar_url))
+      .catch((err) => {
+        setUploadError(err.message || 'Gagal mengunggah foto.')
+        URL.revokeObjectURL(objectUrl)
+        onPreviewChange(null)
+      })
+      .finally(() => setUploading(false))
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-4">
+        <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-full border-2 border-blue-200 bg-slate-100">
+          {previewUrl ? (
+            <img src={previewUrl} alt="Foto profil" className="h-full w-full object-cover" />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-blue-100 text-2xl font-bold text-blue-600">
+              {(fallbackLabel || '?')[0].toUpperCase()}
+            </div>
+          )}
+          {uploading && (
+            <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40">
+              <svg className="h-5 w-5 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+              </svg>
+            </div>
+          )}
+        </div>
+        <div className="flex-1">
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+            className="rounded-xl border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
+          >
+            {uploading ? 'Mengunggah...' : previewUrl ? 'Ganti Foto' : 'Pilih Foto'}
+          </button>
+          <p className="mt-1 text-xs text-slate-400">JPG, PNG, atau WEBP · Maks 5 MB</p>
+        </div>
+      </div>
+      {uploadError && <p className="mt-2 text-xs text-red-500">{uploadError}</p>}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+    </div>
+  )
+}
+
+// ── Komponen upload dokumen ───────────────────────────────────────────────────
+
+/**
+ * docType: 'cv' | 'id'
+ * label: nama tampilan, misal "CV/Resume" atau "KTP/KTM"
+ * hasExisting: apakah sudah ada file di server (dari profil yang di-load)
+ * onUploaded: callback setelah upload sukses
+ */
+function DocumentUploader({ docType, label, hasExisting, onUploaded }) {
+  const fileInputRef = useRef(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+  const [uploaded, setUploaded] = useState(hasExisting ?? false)
+  const [fileName, setFileName] = useState(null)
+
+  const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+
+  function handleFileChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!allowed.includes(file.type)) {
+      setUploadError('Format tidak didukung. Gunakan JPG, PNG, WEBP, atau PDF.')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadError('Ukuran file melebihi 10 MB.')
+      return
+    }
+
+    setUploadError('')
+    setUploading(true)
+    setFileName(file.name)
+
+    uploadWorkerDocument(docType, file)
+      .then(() => {
+        setUploaded(true)
+        onUploaded?.()
+      })
+      .catch((err) => {
+        setUploadError(err.message || 'Gagal mengunggah.')
+        setFileName(null)
+      })
+      .finally(() => setUploading(false))
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          {/* Ikon status */}
+          <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-sm ${
+            uploaded ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-400'
+          }`}>
+            {uploaded ? '✓' : (docType === 'cv' ? '📄' : '🪪')}
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-slate-700">{label}</p>
+            {fileName ? (
+              <p className="truncate text-xs text-blue-600">{fileName}</p>
+            ) : uploaded ? (
+              <p className="text-xs text-slate-400">File sudah diunggah</p>
+            ) : (
+              <p className="text-xs text-slate-400">Belum ada file</p>
+            )}
+          </div>
+        </div>
+
+        {/* Tombol upload */}
+        <button
+          type="button"
+          disabled={uploading}
+          onClick={() => fileInputRef.current?.click()}
+          className="flex-shrink-0 rounded-xl border border-blue-300 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-50 disabled:opacity-50"
+        >
+          {uploading ? '⏳ Mengunggah...' : uploaded ? 'Ganti' : 'Pilih File'}
+        </button>
+      </div>
+
+      {uploadError && (
+        <p className="mt-2 text-xs text-red-500">{uploadError}</p>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,application/pdf"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+    </div>
+  )
+}
+
 // ── Form utama ────────────────────────────────────────────────────────────────
 
 export default function WorkerProfileForm() {
@@ -175,6 +350,9 @@ export default function WorkerProfileForm() {
   const navigate = useNavigate()
 
   // ── State form ──────────────────────────────────────────────────────────
+
+  // Avatar
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null)
 
   // A. Informasi pribadi
   const [nickname, setNickname] = useState('')
@@ -293,14 +471,13 @@ export default function WorkerProfileForm() {
                 />
               </Field>
 
-              {/* Foto profil — ditunda */}
-              <Field label="Foto profil" hint="Upload foto profil belum tersedia — fitur ini akan hadir setelah integrasi storage selesai.">
-                <div className="flex items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-200 text-lg text-slate-400">
-                    👤
-                  </div>
-                  <p className="text-sm text-slate-400 italic">Belum tersedia</p>
-                </div>
+              {/* Foto profil */}
+              <Field label="Foto profil">
+                <AvatarUploader
+                  previewUrl={avatarPreviewUrl}
+                  onPreviewChange={setAvatarPreviewUrl}
+                  fallbackLabel={user?.full_name}
+                />
               </Field>
 
               {/* Nama panggilan */}
@@ -437,18 +614,23 @@ export default function WorkerProfileForm() {
             </Section>
           </div>
 
-          {/* ── D. Dokumen (ditunda) ───────────────────────────────────── */}
+          {/* ── D. Dokumen ────────────────────────────────────────────── */}
           <div className="rounded-2xl bg-white p-6 shadow-sm shadow-slate-200/60">
             <Section title="D. Dokumen">
-              <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4">
-                <p className="text-sm font-medium text-slate-600">
-                  Upload CV/Resume dan KTP/KTM
-                </p>
-                <p className="mt-1 text-xs text-slate-400 italic">
-                  Fitur upload dokumen belum tersedia saat ini. Storage belum
-                  dikonfigurasi. Akan diaktifkan pada tahap berikutnya.
-                </p>
-              </div>
+              <p className="text-xs text-slate-400">
+                Upload dokumen untuk memperkuat profil kamu. Format yang diterima: JPG, PNG, WEBP, atau PDF · Maks 10 MB per file.
+              </p>
+              <DocumentUploader
+                docType="cv"
+                label="CV / Resume"
+              />
+              <DocumentUploader
+                docType="id"
+                label="KTP / KTM"
+              />
+              <p className="text-xs text-slate-400 italic">
+                💡 Simpan profil terlebih dahulu sebelum mengupload dokumen.
+              </p>
             </Section>
           </div>
 

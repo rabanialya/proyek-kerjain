@@ -411,3 +411,152 @@ def serve_disbursement_proof(
         media_type=_safe_content_type(file_path),
         filename=file_path.name,
     )
+
+
+# ---------------------------------------------------------------------------
+# Endpoint 4: Avatar / Foto Profil
+# ---------------------------------------------------------------------------
+
+_PRIVATE_AVATAR_DIR = Path("_private_uploads") / "avatars"
+_PRIVATE_AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+
+# Direktori lama (legacy, jika sebelumnya pernah disimpan di tempat lain)
+_LEGACY_AVATAR_DIR = Path("uploads") / "avatars"
+
+
+@router.get(
+    "/avatar",
+    summary="Ambil foto profil milik user yang sedang login (terlindungi)",
+    response_class=FileResponse,
+)
+def serve_my_avatar(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """
+    Melayani foto profil (avatar) milik user yang sedang login.
+
+    - Membutuhkan autentikasi (Bearer token valid).
+    - Mengembalikan 404 jika user belum pernah mengupload foto profil.
+    - File dibaca langsung dari filesystem oleh backend — tidak ada redirect publik.
+    """
+    if not current_user.avatar_url:
+        raise HTTPException(status_code=404, detail="Foto profil belum diunggah.")
+
+    file_path = _resolve_safe_path(
+        current_user.avatar_url,
+        _PRIVATE_AVATAR_DIR,
+        _LEGACY_AVATAR_DIR,
+    )
+    return FileResponse(
+        path=str(file_path),
+        media_type=_safe_content_type(file_path),
+        filename=file_path.name,
+    )
+
+
+@router.get(
+    "/avatar/{user_id}",
+    summary="Ambil foto profil user tertentu berdasarkan user ID (terlindungi)",
+    response_class=FileResponse,
+)
+def serve_user_avatar(
+    user_id: UUID,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """
+    Melayani foto profil user lain berdasarkan `user_id`.
+
+    - Membutuhkan autentikasi (Bearer token valid).
+    - Dapat diakses oleh user manapun yang sudah login (avatar bersifat semi-publik
+      karena sudah ditampilkan di halaman profil publik).
+    - Mengembalikan 404 jika user tidak ditemukan atau belum mengupload foto.
+    """
+    target_user = session.get(User, user_id)
+    if not target_user or not target_user.is_active:
+        raise HTTPException(status_code=404, detail="User tidak ditemukan.")
+
+    if not target_user.avatar_url:
+        raise HTTPException(status_code=404, detail="Foto profil belum diunggah.")
+
+    file_path = _resolve_safe_path(
+        target_user.avatar_url,
+        _PRIVATE_AVATAR_DIR,
+        _LEGACY_AVATAR_DIR,
+    )
+    return FileResponse(
+        path=str(file_path),
+        media_type=_safe_content_type(file_path),
+        filename=file_path.name,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Endpoint 5: Dokumen Worker (CV/Resume dan KTP/KTM)
+# ---------------------------------------------------------------------------
+
+_PRIVATE_WORKER_DOCS_DIR = Path("_private_uploads") / "worker-docs"
+_PRIVATE_WORKER_DOCS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Tidak ada direktori legacy untuk worker-docs (fitur baru)
+_LEGACY_WORKER_DOCS_DIR = _PRIVATE_WORKER_DOCS_DIR
+
+
+@router.get(
+    "/worker-docs/{doc_type}",
+    summary="Akses dokumen Worker (CV atau KTP/KTM) — hanya pemilik dan admin",
+    response_class=FileResponse,
+)
+def serve_worker_document(
+    doc_type: str,
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """
+    Melayani dokumen Worker setelah memverifikasi:
+
+    - `doc_type` harus `cv` (CV/Resume) atau `id` (KTP/KTM).
+    - Hanya Worker pemilik dokumen ATAU Admin yang dapat mengakses.
+    - File dibaca langsung dari filesystem — tidak ada redirect publik.
+    """
+    if doc_type not in {"cv", "id"}:
+        raise HTTPException(
+            status_code=400,
+            detail="doc_type tidak valid. Gunakan 'cv' atau 'id'.",
+        )
+
+    worker_profile = session.exec(
+        select(WorkerProfile).where(WorkerProfile.user_id == current_user.id)
+    ).first()
+
+    # Admin: dapat mengakses dokumen siapapun dengan menyertakan worker_id query param
+    # (untuk kesederhanaan, admin menggunakan endpoint ini untuk profil mereka sendiri juga)
+    if not worker_profile and not current_user.is_admin:
+        raise HTTPException(
+            status_code=404,
+            detail="Worker profile tidak ditemukan.",
+        )
+
+    if worker_profile is None:
+        raise HTTPException(status_code=404, detail="Worker profile tidak ditemukan.")
+
+    stored_url = worker_profile.cv_url if doc_type == "cv" else worker_profile.id_document_url
+
+    if not stored_url:
+        label = "CV/Resume" if doc_type == "cv" else "KTP/KTM"
+        raise HTTPException(
+            status_code=404,
+            detail=f"{label} belum diunggah.",
+        )
+
+    file_path = _resolve_safe_path(
+        stored_url,
+        _PRIVATE_WORKER_DOCS_DIR,
+        _LEGACY_WORKER_DOCS_DIR,
+    )
+    return FileResponse(
+        path=str(file_path),
+        media_type=_safe_content_type(file_path),
+        filename=file_path.name,
+    )

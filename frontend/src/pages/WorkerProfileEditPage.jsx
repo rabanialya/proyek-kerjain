@@ -1,7 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
-import { fetchMyWorkerProfile, updateWorkerProfile } from '../lib/api'
+import {
+  fetchMyWorkerProfile,
+  fetchMyAvatarUrl,
+  fetchWorkerDocumentUrl,
+  updateWorkerProfile,
+  uploadAvatar,
+  uploadWorkerDocument,
+} from '../lib/api'
 
 // ── Konstanta pilihan (sama dengan WorkerProfileForm) ─────────────────────────
 
@@ -144,6 +151,202 @@ function SkeletonBlock({ className }) {
   return <div className={`animate-pulse rounded-xl bg-slate-200 ${className}`} />
 }
 
+// ── Komponen upload avatar ────────────────────────────────────────────────────
+
+function AvatarUploader({ previewUrl, onUploaded, fallbackLabel }) {
+  const fileInputRef = useRef(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+  const [localPreview, setLocalPreview] = useState(null)
+
+  // localPreview (object URL dari file baru) takes priority over previewUrl (dari server)
+  const displayUrl = localPreview ?? previewUrl
+
+  function handleFileChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validasi sisi klien
+    const allowed = ['image/jpeg', 'image/png', 'image/webp']
+    if (!allowed.includes(file.type)) {
+      setUploadError('Format tidak didukung. Pilih file JPG, PNG, atau WEBP.')
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError('Ukuran file melebihi 5 MB.')
+      return
+    }
+
+    setUploadError('')
+
+    // Tampilkan preview langsung
+    const objectUrl = URL.createObjectURL(file)
+    setLocalPreview(objectUrl)
+
+    // Upload ke server
+    setUploading(true)
+    uploadAvatar(file)
+      .then((res) => {
+        onUploaded?.(res.avatar_url)
+      })
+      .catch((err) => {
+        setUploadError(err.message || 'Gagal mengunggah foto.')
+        // Batalkan preview jika upload gagal
+        URL.revokeObjectURL(objectUrl)
+        setLocalPreview(null)
+      })
+      .finally(() => setUploading(false))
+  }
+
+  return (
+    <div>
+      <div className="flex items-center gap-4">
+        {/* Thumbnail */}
+        <div className="relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-full border-2 border-blue-200 bg-slate-100">
+          {displayUrl ? (
+            <img
+              src={displayUrl}
+              alt="Foto profil"
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center bg-blue-100 text-2xl font-bold text-blue-600">
+              {(fallbackLabel || '?')[0].toUpperCase()}
+            </div>
+          )}
+          {uploading && (
+            <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40">
+              <svg className="h-5 w-5 animate-spin text-white" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+              </svg>
+            </div>
+          )}
+        </div>
+
+        {/* Tombol pilih foto */}
+        <div className="flex-1">
+          <button
+            type="button"
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+            className="rounded-xl border border-blue-300 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
+          >
+            {uploading ? 'Mengunggah...' : displayUrl ? 'Ganti Foto' : 'Pilih Foto'}
+          </button>
+          <p className="mt-1 text-xs text-slate-400">JPG, PNG, atau WEBP · Maks 5 MB</p>
+        </div>
+      </div>
+
+      {/* Error upload */}
+      {uploadError && (
+        <p className="mt-2 text-xs text-red-500">{uploadError}</p>
+      )}
+
+      {/* Input tersembunyi */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+    </div>
+  )
+}
+
+// ── Komponen upload dokumen ───────────────────────────────────────────────────
+
+function DocumentUploader({ docType, label, hasExisting, onUploaded }) {
+  const fileInputRef = useRef(null)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState('')
+  const [uploaded, setUploaded] = useState(hasExisting ?? false)
+  const [fileName, setFileName] = useState(null)
+
+  // Sync jika hasExisting berubah dari luar (setelah data dimuat)
+  const [synced, setSynced] = useState(false)
+  if (!synced && hasExisting !== undefined) {
+    setUploaded(hasExisting)
+    setSynced(true)
+  }
+
+  const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
+
+  function handleFileChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!allowed.includes(file.type)) {
+      setUploadError('Format tidak didukung. Gunakan JPG, PNG, WEBP, atau PDF.')
+      return
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setUploadError('Ukuran file melebihi 10 MB.')
+      return
+    }
+
+    setUploadError('')
+    setUploading(true)
+    setFileName(file.name)
+
+    uploadWorkerDocument(docType, file)
+      .then(() => {
+        setUploaded(true)
+        onUploaded?.()
+      })
+      .catch((err) => {
+        setUploadError(err.message || 'Gagal mengunggah.')
+        setFileName(null)
+      })
+      .finally(() => setUploading(false))
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className={`flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full text-sm ${
+            uploaded ? 'bg-blue-100 text-blue-600' : 'bg-slate-200 text-slate-400'
+          }`}>
+            {uploaded ? '✓' : (docType === 'cv' ? '📄' : '🪪')}
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-slate-700">{label}</p>
+            {fileName ? (
+              <p className="truncate text-xs text-blue-600">{fileName}</p>
+            ) : uploaded ? (
+              <p className="text-xs text-slate-400">File sudah diunggah</p>
+            ) : (
+              <p className="text-xs text-slate-400">Belum ada file</p>
+            )}
+          </div>
+        </div>
+        <button
+          type="button"
+          disabled={uploading}
+          onClick={() => fileInputRef.current?.click()}
+          className="flex-shrink-0 rounded-xl border border-blue-300 bg-white px-3 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-50 disabled:opacity-50"
+        >
+          {uploading ? '⏳ Mengunggah...' : uploaded ? 'Ganti' : 'Pilih File'}
+        </button>
+      </div>
+
+      {uploadError && (
+        <p className="mt-2 text-xs text-red-500">{uploadError}</p>
+      )}
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,application/pdf"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+    </div>
+  )
+}
+
 // ── Halaman utama ─────────────────────────────────────────────────────────────
 
 export default function WorkerProfileEditPage() {
@@ -153,6 +356,13 @@ export default function WorkerProfileEditPage() {
   // State loading data awal
   const [initialLoading, setInitialLoading] = useState(true)
   const [loadError, setLoadError] = useState(null)
+
+  // Avatar state
+  const [avatarPreviewUrl, setAvatarPreviewUrl] = useState(null)
+
+  // Dokumen state (apakah sudah ada file di server)
+  const [hasCv, setHasCv] = useState(false)
+  const [hasIdDoc, setHasIdDoc] = useState(false)
 
   // Form state — di-pre-fill setelah data dimuat
   const [nickname, setNickname] = useState('')
@@ -174,14 +384,18 @@ export default function WorkerProfileEditPage() {
   // ── Load data lama ──────────────────────────────────────────────────────
 
   useEffect(() => {
-    fetchMyWorkerProfile()
-      .then((p) => {
+    Promise.all([
+      fetchMyWorkerProfile(),
+      fetchMyAvatarUrl().catch(() => null), // null jika belum ada foto
+      fetchWorkerDocumentUrl('cv').catch(() => null),
+      fetchWorkerDocumentUrl('id').catch(() => null),
+    ])
+      .then(([p, avatarUrl, cvUrl, idUrl]) => {
         setNickname(p.nickname ?? '')
         setLocation(p.location ?? '')
         setStatusPekerjaan(p.status_pekerjaan ?? '')
         setKomitmenJam(p.komitmen_jam ?? '')
         // Normalize & filter: backend expects lowercase values (e.g. 'pagi', 'akhir_pekan')
-        // Filter out any legacy/invalid values that are no longer in the valid options list
         const validShiftValues = OPSI_SHIFT.map((o) => o.value)
         setPreferensiShift(
           (p.preferensi_shift ?? [])
@@ -193,13 +407,15 @@ export default function WorkerProfileEditPage() {
         setSkills(p.skills ?? [])
         setBio(p.bio ?? '')
         // Normalize & filter: backend expects lowercase values (e.g. 'cash', 'e_wallet')
-        // Filter out any legacy/invalid values that are no longer in the valid options list
         const validPaymentValues = OPSI_PAYMENT.map((o) => o.value)
         setPaymentMethods(
           (p.accepted_payment_methods ?? [])
             .map((v) => v.toLowerCase())
             .filter((v) => validPaymentValues.includes(v))
         )
+        setAvatarPreviewUrl(avatarUrl)
+        setHasCv(!!cvUrl)
+        setHasIdDoc(!!idUrl)
       })
       .catch((err) => setLoadError(err.message ?? 'Gagal memuat profil.'))
       .finally(() => setInitialLoading(false))
@@ -213,10 +429,6 @@ export default function WorkerProfileEditPage() {
     setSaving(true)
 
     try {
-      // Hanya kirim field yang memiliki nilai — backend exclude_unset=True
-      // akan mengabaikan field yang tidak dikirim dan mempertahankan nilai lama.
-      // Kita kirim semua field yang ada di form; field kosong dikirim sebagai null
-      // hanya jika user memang sengaja mengosongkannya.
       const body = {
         nickname: nickname.trim() || null,
         location: location.trim() || null,
@@ -292,8 +504,19 @@ export default function WorkerProfileEditPage() {
                 Hanya field yang kamu ubah yang akan diperbarui.
               </p>
             </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-600 text-lg font-bold text-white">
-              {(user?.full_name ?? '?')[0].toUpperCase()}
+            {/* Avatar di header */}
+            <div className="h-12 w-12 overflow-hidden rounded-2xl">
+              {avatarPreviewUrl ? (
+                <img
+                  src={avatarPreviewUrl}
+                  alt="Avatar"
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-blue-600 text-lg font-bold text-white">
+                  {(user?.full_name ?? '?')[0].toUpperCase()}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -317,6 +540,21 @@ export default function WorkerProfileEditPage() {
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500 outline-none"
               />
             </Field>
+
+            {/* Foto profil */}
+            <Field label="Foto profil">
+              <AvatarUploader
+                previewUrl={avatarPreviewUrl}
+                fallbackLabel={user?.full_name}
+                onUploaded={() => {
+                  // Reload preview dari server setelah upload berhasil
+                  fetchMyAvatarUrl()
+                    .then((url) => setAvatarPreviewUrl(url))
+                    .catch(() => {})
+                }}
+              />
+            </Field>
+
             <Field label="Nama panggilan" htmlFor="nickname">
               <input
                 id="nickname"
@@ -431,16 +669,27 @@ export default function WorkerProfileEditPage() {
             </Field>
           </Section>
 
-          {/* ── D. Dokumen (ditunda) ── */}
+          {/* ── D. Dokumen ── */}
           <div className="rounded-2xl bg-white p-6 shadow-sm">
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-blue-600">
+            <h2 className="mb-1 text-xs font-semibold uppercase tracking-wider text-blue-600">
               D. Dokumen
             </h2>
-            <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4">
-              <p className="text-sm font-medium text-slate-600">Upload CV/Resume dan KTP/KTM</p>
-              <p className="mt-1 text-xs text-slate-400 italic">
-                Fitur upload belum tersedia. Akan diaktifkan setelah storage dikonfigurasi.
-              </p>
+            <p className="mb-4 text-xs text-slate-400">
+              Format yang diterima: JPG, PNG, WEBP, atau PDF · Maks 10 MB per file.
+            </p>
+            <div className="space-y-3">
+              <DocumentUploader
+                docType="cv"
+                label="CV / Resume"
+                hasExisting={hasCv}
+                onUploaded={() => setHasCv(true)}
+              />
+              <DocumentUploader
+                docType="id"
+                label="KTP / KTM"
+                hasExisting={hasIdDoc}
+                onUploaded={() => setHasIdDoc(true)}
+              />
             </div>
           </div>
 
