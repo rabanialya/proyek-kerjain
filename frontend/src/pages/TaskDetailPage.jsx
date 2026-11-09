@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { fetchCategories, fetchTaskById } from '../lib/api'
 import { useApplicationStatus } from '../hooks/useApplicationStatus'
+import {
+  Globe, MapPin, Shuffle, AlertTriangle, Lock, Clock,
+  Building2, CheckCircle2, Hourglass, XCircle, FileText,
+} from 'lucide-react'
 
 // ─── Konstanta label ────────────────────────────────────────────────────────
 
 const WORK_TYPE_LABELS = {
-  remote:  { label: 'Remote (WFH / Online)', icon: '🌐' },
-  on_site: { label: 'On-site (Tatap Muka)',  icon: '📍' },
-  hybrid:  { label: 'Hybrid',                icon: '🔀' },
+  remote:  { label: 'Remote (WFH / Online)', icon: Globe },
+  on_site: { label: 'On-site (Tatap Muka)',  icon: MapPin },
+  hybrid:  { label: 'Hybrid',                icon: Shuffle },
 }
 
 const WAGE_RATE_LABELS = {
@@ -122,9 +126,9 @@ function ApplicationPanel({ taskId, task }) {
   }
 
   const statusConfig = {
-    pending:  { cls: 'bg-yellow-50 border-yellow-200 text-yellow-800', icon: '⏳', label: 'Menunggu review' },
-    accepted: { cls: 'bg-green-50 border-green-200 text-green-800',  icon: '✅', label: 'Lamaranmu diterima' },
-    rejected: { cls: 'bg-red-50 border-red-200 text-red-800',        icon: '❌', label: 'Lamaranmu ditolak' },
+    pending:  { cls: 'bg-yellow-50 border-yellow-200 text-yellow-800', icon: Hourglass,    label: 'Menunggu review' },
+    accepted: { cls: 'bg-green-50 border-green-200 text-green-800',    icon: CheckCircle2, label: 'Lamaranmu diterima' },
+    rejected: { cls: 'bg-red-50 border-red-200 text-red-800',          icon: XCircle,      label: 'Lamaranmu ditolak' },
   }
 
   if (checkLoading) {
@@ -147,7 +151,7 @@ function ApplicationPanel({ taskId, task }) {
           Status Lamaranmu
         </h2>
         <div className={`flex items-center gap-3 rounded-xl border px-4 py-3 ${cfg?.cls ?? 'bg-slate-50 border-slate-200 text-slate-700'}`}>
-          <span className="text-lg">{cfg?.icon ?? '📄'}</span>
+          {cfg?.icon ? <cfg.icon size={18} className="shrink-0" /> : <FileText size={18} className="shrink-0 text-slate-400" />}
           <div>
             <p className="font-semibold text-sm">{cfg?.label ?? application.status}</p>
             <p className="text-xs opacity-70">Dikirim {formatDate(application.applied_at)}</p>
@@ -191,7 +195,7 @@ function ApplicationPanel({ taskId, task }) {
             ? 'border-red-200 bg-red-50 text-red-700'
             : 'border-amber-200 bg-amber-50 text-amber-800'
         }`}>
-          <span>{deadlinePassed ? '🔒' : '⏰'}</span>
+          <span>{deadlinePassed ? <Lock size={14} className="shrink-0" /> : <Clock size={14} className="shrink-0" />}</span>
           <div>
             <p className="font-medium">
               {deadlinePassed ? 'Pendaftaran sudah ditutup' : 'Batas akhir pendaftaran'}
@@ -311,7 +315,7 @@ export default function TaskDetailPage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
         <div className="w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-lg">
-          <p className="text-3xl">⚠️</p>
+          <AlertTriangle size={36} className="mx-auto text-amber-400" />
           <h2 className="mt-3 font-semibold text-slate-900">Tugas tidak dapat dimuat</h2>
           <p className="mt-2 text-sm text-slate-500">{error}</p>
           <div className="mt-5 flex flex-col gap-2">
@@ -372,7 +376,7 @@ export default function TaskDetailPage() {
               <Pill color="blue">Published</Pill>
               {workTypeCfg && (
                 <Pill color="slate">
-                  {workTypeCfg.icon} {workTypeCfg.label}
+                  <workTypeCfg.icon size={12} className="inline mr-1" />{workTypeCfg.label}
                 </Pill>
               )}
             </div>
@@ -380,7 +384,9 @@ export default function TaskDetailPage() {
 
           {/* Lokasi — hanya jika ada */}
           {task.location && (
-            <p className="mt-2 text-sm text-slate-500">📍 {task.location}</p>
+            <p className="mt-2 text-sm text-slate-500 flex items-center gap-1">
+              <MapPin size={13} className="shrink-0" /> {task.location}
+            </p>
           )}
 
           {/* Upah ringkas di header */}
@@ -393,12 +399,12 @@ export default function TaskDetailPage() {
           {/* Peringatan deadline — di header agar mudah terlihat */}
           {task.application_deadline && deadlinePassed && (
             <div className="mt-3 flex items-center gap-2 rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-xs font-medium text-red-700">
-              🔒 Pendaftaran sudah ditutup pada {formatDateTime(task.application_deadline)}
+              <Lock size={12} className="shrink-0" /> Pendaftaran sudah ditutup pada {formatDateTime(task.application_deadline)}
             </div>
           )}
           {task.application_deadline && !deadlinePassed && (
             <div className="mt-3 flex items-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs font-medium text-amber-800">
-              ⏰ Daftar sebelum {formatDateTime(task.application_deadline)}
+              <Clock size={12} className="shrink-0" /> Daftar sebelum {formatDateTime(task.application_deadline)}
             </div>
           )}
 
@@ -410,6 +416,18 @@ export default function TaskDetailPage() {
           ) : (
             <p className="mt-4 text-sm italic text-slate-400">Tidak ada deskripsi.</p>
           )}
+
+          {/* Tautan profil Employer */}
+          {task.employer_id && (
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <Link
+                to={`/profiles/employer/${task.employer_id}`}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm font-medium text-emerald-700 hover:bg-emerald-100 transition-colors"
+              >
+                <Building2 size={14} className="shrink-0" /> Lihat Profil Pemberi Kerja
+              </Link>
+            </div>
+          )}
         </section>
 
         {/* ── Detail Tugas ── */}
@@ -420,7 +438,7 @@ export default function TaskDetailPage() {
           <dl className="space-y-3">
             <InfoRow label="Tipe kerja">
               {workTypeCfg
-                ? <span>{workTypeCfg.icon} {workTypeCfg.label}</span>
+                ? <span className="flex items-center gap-1"><workTypeCfg.icon size={13} className="shrink-0" /> {workTypeCfg.label}</span>
                 : <span className="text-slate-400 italic">Belum ditentukan</span>
               }
             </InfoRow>
@@ -489,7 +507,7 @@ export default function TaskDetailPage() {
                   <ul className="space-y-1.5">
                     {requirementFlags.map(flag => (
                       <li key={flag} className="flex items-center gap-2 text-sm text-slate-700">
-                        <span className="text-emerald-500 font-bold">✓</span>
+                        <CheckCircle2 size={14} className="shrink-0 text-emerald-500" />
                         {REQUIREMENT_FLAG_LABELS[flag] ?? flag}
                       </li>
                     ))}

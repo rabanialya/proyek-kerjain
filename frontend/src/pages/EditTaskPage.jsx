@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { fetchCategories, fetchMyTaskById, updateTask } from '../lib/api'
+import { createCategory, fetchCategories, fetchMyTaskById, updateTask } from '../lib/api'
+import { AlertTriangle, Info } from 'lucide-react'
 
 // ─── Konstanta (sama dengan CreateTaskPage) ─────────────────────────────────
 
@@ -21,6 +22,7 @@ const WAGE_RATE_OPTIONS = [
   { value: 'daily',      label: 'Per Hari' },
   { value: 'hourly',     label: 'Per Jam' },
   { value: 'per_output', label: 'Per Output / Task' },
+  { value: 'monthly',    label: 'Bulanan' },
 ]
 
 const REQUIREMENT_FLAG_OPTIONS = [
@@ -192,6 +194,11 @@ export default function EditTaskPage() {
   const [submitError, setSubmitError] = useState(null)
   const submittingRef = useRef(false)
 
+  // State untuk input kategori kustom
+  const [customCatName, setCustomCatName]   = useState('')
+  const [customCatError, setCustomCatError] = useState(null)
+  const CUSTOM_CAT_VALUE = '__custom__'
+
   // Load task + kategori
   useEffect(() => {
     let active = true
@@ -229,6 +236,10 @@ export default function EditTaskPage() {
     const { name, value } = e.target
     setFields(prev => ({ ...prev, [name]: value }))
     if (errors[name]) setErrors(prev => { const n = { ...prev }; delete n[name]; return n })
+    if (name === 'category_id') {
+      setCustomCatName('')
+      setCustomCatError(null)
+    }
   }
 
   function handleFlagChange(value) {
@@ -245,7 +256,25 @@ export default function EditTaskPage() {
     if (submittingRef.current) return
     submittingRef.current = true
 
-    const fieldErrors = validate(fields)
+    // Validasi nama kategori kustom jika dipilih
+    if (fields.category_id === CUSTOM_CAT_VALUE) {
+      if (!customCatName.trim()) {
+        setCustomCatError('Nama kategori tidak boleh kosong.')
+        submittingRef.current = false
+        return
+      }
+      if (customCatName.trim().length < 2) {
+        setCustomCatError('Nama kategori minimal 2 karakter.')
+        submittingRef.current = false
+        return
+      }
+    }
+
+    const fieldErrors = validate(
+      fields.category_id === CUSTOM_CAT_VALUE && customCatName.trim()
+        ? { ...fields, category_id: 'filled' }
+        : fields
+    )
     if (Object.keys(fieldErrors).length > 0) {
       setErrors(fieldErrors)
       submittingRef.current = false
@@ -253,11 +282,34 @@ export default function EditTaskPage() {
     }
 
     setErrors({})
+    setCustomCatError(null)
     setSubmitting(true)
     setSubmitError(null)
 
     try {
-      const updated = await updateTask(taskId, buildPayload(fields))
+      let resolvedCategoryId = fields.category_id
+
+      if (fields.category_id === CUSTOM_CAT_VALUE) {
+        try {
+          const newCat = await createCategory(customCatName)
+          resolvedCategoryId = newCat.id
+          setCategories(prev => [...prev, newCat])
+        } catch (catErr) {
+          const existing = categories.find(
+            c => c.name.toLowerCase() === customCatName.trim().toLowerCase()
+          )
+          if (existing) {
+            resolvedCategoryId = existing.id
+          } else {
+            setCustomCatError(catErr.message ?? 'Gagal membuat kategori baru.')
+            setSubmitting(false)
+            submittingRef.current = false
+            return
+          }
+        }
+      }
+
+      const updated = await updateTask(taskId, buildPayload({ ...fields, category_id: resolvedCategoryId }))
       navigate('/employer', {
         state: { flash: `Task "${updated.title}" berhasil diperbarui.` },
         replace: true,
@@ -289,7 +341,7 @@ export default function EditTaskPage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
         <div className="w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-lg">
-          <p className="text-3xl">⚠️</p>
+          <AlertTriangle size={36} className="mx-auto text-amber-400" />
           <h2 className="mt-3 font-semibold text-slate-900">Tidak dapat mengedit task</h2>
           <p className="mt-2 text-sm text-slate-500">{pageError}</p>
           <button onClick={() => navigate('/employer')}
@@ -326,8 +378,9 @@ export default function EditTaskPage() {
         {/* Peringatan task published */}
         {taskStatus === 'published' && (
           <div role="note"
-            className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
-            ℹ️ Task ini sudah dipublikasikan. Perubahan akan langsung terlihat oleh Worker.
+            className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 flex items-start gap-2">
+            <Info size={15} className="mt-0.5 shrink-0 text-blue-600" />
+            <span>Task ini sudah dipublikasikan. Perubahan akan langsung terlihat oleh Worker.</span>
           </div>
         )}
 
@@ -354,7 +407,27 @@ export default function EditTaskPage() {
                   {c.name}{!c.is_active ? ' (tidak aktif)' : ''}
                 </option>
               ))}
+              <option value={CUSTOM_CAT_VALUE}>Ketik kategori sendiri…</option>
             </select>
+            {fields.category_id === CUSTOM_CAT_VALUE && (
+              <div className="mt-2">
+                <input
+                  type="text"
+                  placeholder="Nama kategori baru, contoh: Pertanian"
+                  value={customCatName}
+                  onChange={e => { setCustomCatName(e.target.value); setCustomCatError(null) }}
+                  disabled={submitting}
+                  maxLength={60}
+                  className={inp}
+                />
+                {customCatError && (
+                  <p className="mt-1 text-xs text-red-600">{customCatError}</p>
+                )}
+                <p className="mt-1 text-xs text-slate-400">
+                  Kategori baru akan otomatis ditambahkan ke sistem.
+                </p>
+              </div>
+            )}
           </InputField>
 
           <InputField id="description" label="Deskripsi"
@@ -392,7 +465,7 @@ export default function EditTaskPage() {
             {/* Task lama tanpa work_type */}
             {!fields.work_type && (
               <p className="mt-2 text-xs text-amber-600">
-                ⚠ Tipe kerja belum ditentukan. Pilih tipe kerja sebelum mempublikasikan.
+                Tipe kerja belum ditentukan. Pilih tipe kerja sebelum mempublikasikan.
               </p>
             )}
           </InputField>
@@ -440,7 +513,7 @@ export default function EditTaskPage() {
             {/* Task lama tanpa wage_rate */}
             {!fields.wage_rate && (
               <p className="mt-1 text-xs text-amber-600">
-                ⚠ Satuan upah belum ditentukan. Pilih satuan sebelum mempublikasikan.
+                Satuan upah belum ditentukan. Pilih satuan sebelum mempublikasikan.
               </p>
             )}
           </div>

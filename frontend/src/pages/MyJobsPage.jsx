@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useMyWorkerJobs } from '../hooks/useMyWorkerJobs'
 import { fetchPaymentsByAssignment } from '../lib/api'
 import PaymentStatusBadge from '../components/PaymentStatusBadge'
+import { MapPin, Building2, Calendar, AlertTriangle, Briefcase } from 'lucide-react'
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 

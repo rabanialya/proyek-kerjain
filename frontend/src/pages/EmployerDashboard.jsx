@@ -3,6 +3,10 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useDashboardEmployer } from '../hooks/useDashboardEmployer'
 import { publishTask } from '../lib/api'
+import {
+  AlertTriangle, CheckCircle2, X, MapPin, Pencil, Rocket,
+  Plus, LayoutList, Search, FileText, BadgeCheck,
+} from 'lucide-react'
 import NotificationBell from '../components/NotificationBell'
 
 // ─── Komponen kecil ────────────────────────────────────────────────────────
@@ -68,17 +72,17 @@ function TaskRow({ task, onEdit, onPublish, publishing }) {
         <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
           <button
             onClick={() => onEdit(task.id)}
-            className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-200"
+            className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-200 flex items-center gap-1"
           >
-            ✏️ Edit
+            <Pencil size={11} /> Edit
           </button>
           {task.status === 'draft' && (
             <button
               onClick={() => onPublish(task)}
               disabled={publishing === task.id}
-              className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+              className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-1"
             >
-              {publishing === task.id ? 'Memproses…' : '🚀 Publikasikan'}
+              {publishing === task.id ? 'Memproses…' : <><Rocket size={11} /> Publikasikan</>}
             </button>
           )}
         </div>
@@ -166,7 +170,7 @@ export default function EmployerDashboard() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
         <div className="w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-lg">
-          <p className="text-3xl">⚠️</p>
+          <AlertTriangle size={36} className="mx-auto text-amber-400" />
           <h2 className="mt-3 font-semibold text-slate-900">
             Gagal memuat dashboard
           </h2>
@@ -192,13 +196,13 @@ export default function EmployerDashboard() {
             role="status"
             className="flex items-start justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
           >
-            <span>✅ {flash}</span>
+            <span className="flex items-center gap-2"><CheckCircle2 size={16} className="shrink-0" />{flash}</span>
             <button
               onClick={() => setFlash(null)}
               className="shrink-0 text-emerald-500 hover:text-emerald-700"
               aria-label="Tutup"
             >
-              ✕
+              <X size={16} />
             </button>
           </div>
         )}
@@ -224,8 +228,8 @@ export default function EmployerDashboard() {
                       </span>
                     )}
                     {employerProfile?.is_verified && (
-                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700">
-                        ✓ Terverifikasi
+                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700 flex items-center gap-1">
+                        <BadgeCheck size={11} /> Terverifikasi
                       </span>
                     )}
                   </div>
@@ -238,8 +242,8 @@ export default function EmployerDashboard() {
                     </p>
                   )}
                   {employerProfile?.location && (
-                    <p className="text-xs text-slate-500">
-                      📍 {employerProfile.location}
+                    <p className="text-xs text-slate-500 flex items-center gap-1">
+                      <MapPin size={11} className="shrink-0" /> {employerProfile.location}
                     </p>
                   )}
                 </div>
@@ -294,8 +298,10 @@ export default function EmployerDashboard() {
             onClick={() => navigate('/tasks/create')}
             className="flex-1 rounded-2xl bg-emerald-600 px-5 py-4 text-left text-white transition hover:bg-emerald-700"
           >
-            <p className="text-xl">➕</p>
-            <p className="mt-1 font-semibold">Buat tugas baru</p>
+            <div className="flex items-center gap-2">
+              <Plus size={20} />
+              <p className="font-semibold">Buat tugas baru</p>
+            </div>
             <p className="mt-0.5 text-xs text-emerald-200">
               Posting pekerjaan dan cari Worker
             </p>
@@ -304,8 +310,10 @@ export default function EmployerDashboard() {
             onClick={() => navigate('/employer/applications')}
             className="flex-1 rounded-2xl border-2 border-emerald-200 bg-emerald-50 px-5 py-4 text-left transition hover:border-emerald-400 hover:bg-emerald-100"
           >
-            <p className="text-xl">📊</p>
-            <p className="mt-1 font-semibold text-emerald-800">Manajemen lamaran</p>
+            <div className="flex items-center gap-2">
+              <LayoutList size={20} className="text-emerald-700" />
+              <p className="font-semibold text-emerald-800">Manajemen lamaran</p>
+            </div>
             <p className="mt-0.5 text-xs text-emerald-600">Lihat & proses pelamar</p>
           </button>
         </section>
@@ -317,8 +325,10 @@ export default function EmployerDashboard() {
         >
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-xl">🔍</p>
-              <p className="mt-1 font-semibold text-blue-900">Pekerjaan Aktif</p>
+              <div className="flex items-center gap-2">
+                <Search size={20} className="text-blue-700" />
+                <p className="font-semibold text-blue-900">Pekerjaan Aktif</p>
+              </div>
               <p className="mt-0.5 text-xs text-blue-600">
                 Tinjau bukti kerja dan setujui hasil pekerjaan Worker
               </p>
@@ -386,7 +396,7 @@ export default function EmployerDashboard() {
 
           {myTasks.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-300 py-10 text-center">
-              <p className="text-3xl">📝</p>
+              <FileText size={28} className="mx-auto text-slate-300" />
               <p className="mt-2 text-sm font-medium text-slate-600">
                 Belum ada tugas yang dibuat
               </p>

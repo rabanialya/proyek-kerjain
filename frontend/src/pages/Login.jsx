@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import KerjainLogo from '../components/KerjainLogo'
 
 function Login() {
   const { login } = useAuth()
@@ -46,12 +47,12 @@ function Login() {
     <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4 py-10">
       <section className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl shadow-slate-200/60 sm:p-10">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-600 text-2xl font-bold text-white">
-            K
+          <div className="mb-5 flex justify-center">
+            <KerjainLogo variant="full" size="lg" theme="color" />
           </div>
 
           <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-            Selamat datang di Kerjain
+            Selamat datang kembali
           </h1>
 
           <p className="mt-3 text-sm leading-6 text-slate-500">

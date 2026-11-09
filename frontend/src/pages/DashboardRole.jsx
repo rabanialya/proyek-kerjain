@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { Hammer, Building2 } from 'lucide-react'
 
 /**
  * Dashboard pemilihan peran.
@@ -74,7 +75,7 @@ export default function DashboardRole() {
             disabled={profileLoading}
             className="group flex flex-col items-center gap-3 rounded-2xl border-2 border-slate-200 p-6 text-left transition hover:border-blue-500 hover:bg-blue-50 disabled:opacity-50"
           >
-            <span className="text-3xl">🔨</span>
+            <span className="text-3xl"><Hammer size={32} className="text-blue-600" /></span>
             <div>
               <p className="font-semibold text-slate-900 group-hover:text-blue-700">
                 Worker
@@ -93,7 +94,7 @@ export default function DashboardRole() {
             disabled={profileLoading}
             className="group flex flex-col items-center gap-3 rounded-2xl border-2 border-slate-200 p-6 text-left transition hover:border-emerald-500 hover:bg-emerald-50 disabled:opacity-50"
           >
-            <span className="text-3xl">🏢</span>
+            <span className="text-3xl"><Building2 size={32} className="text-emerald-600" /></span>
             <div>
               <p className="font-semibold text-slate-900 group-hover:text-emerald-700">
                 Employer

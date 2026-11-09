@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useTaskList } from '../hooks/useTaskList'
+import { AlertTriangle, MapPin, Lock, Clock, X, Hammer, Search, ClipboardList } from 'lucide-react'
 
 // ─── Komponen kecil ────────────────────────────────────────────────────────
 
@@ -50,7 +51,7 @@ function TaskCard({ task, categoryName, onClick }) {
       )}
 
       {task.location && (
-        <p className="mt-1 text-sm text-slate-500">📍 {task.location}</p>
+        <p className="mt-1 text-sm text-slate-500 flex items-center gap-1"><MapPin size={12} className="shrink-0" /> {task.location}</p>
       )}
 
       {task.description && (
@@ -78,8 +79,8 @@ function TaskCard({ task, categoryName, onClick }) {
             : 'text-amber-600'
         }`}>
           {new Date(task.application_deadline) <= new Date()
-            ? '🔒 Pendaftaran ditutup'
-            : `⏰ Daftar sebelum ${new Date(task.application_deadline).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}`
+            ? <span className="flex items-center gap-1"><Lock size={11} /> Pendaftaran ditutup</span>
+            : <span className="flex items-center gap-1"><Clock size={11} /> Daftar sebelum {new Date(task.application_deadline).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
           }
         </p>
       )}
@@ -96,7 +97,7 @@ function FilterBadge({ label, onRemove }) {
         className="text-blue-500 hover:text-blue-800"
         aria-label={`Hapus filter ${label}`}
       >
-        ✕
+        <X size={12} />
       </button>
     </span>
   )
@@ -132,7 +133,7 @@ export default function TaskListPage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
         <div className="w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-lg">
-          <p className="text-3xl">⚠️</p>
+          <AlertTriangle size={36} className="mx-auto text-amber-400" />
           <h2 className="mt-3 font-semibold text-slate-900">
             Gagal memuat tugas
           </h2>
@@ -171,7 +172,7 @@ export default function TaskListPage() {
         {/* ── Header ── */}
         <div>
           <div className="flex items-center gap-2">
-            <span className="text-xl">🔨</span>
+            <Hammer size={18} className="text-blue-600" />
             <span className="text-xs font-semibold uppercase tracking-widest text-blue-600">
               Worker
             </span>
@@ -189,7 +190,7 @@ export default function TaskListPage() {
         {/* ── Search bar ── */}
         <div className="relative">
           <span className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-slate-400">
-            🔍
+            <Search size={16} />
           </span>
           <input
             type="search"
@@ -272,7 +273,7 @@ export default function TaskListPage() {
           </div>
         ) : tasks.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-300 py-16 text-center">
-            <p className="text-3xl">📋</p>
+            <ClipboardList size={28} className="mx-auto text-slate-300" />
             <p className="mt-2 font-medium text-slate-700">
               {hasActiveFilter
                 ? 'Tidak ada tugas yang sesuai filter'

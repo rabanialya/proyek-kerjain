@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, Link } from 'react-router-dom'
 import { fetchApplicationsByTask, fetchMyTasks, updateApplicationStatus, fetchMyAssignments, createAssignment } from '../lib/api'
+import { CheckCircle2, XCircle, Star, AlertTriangle, UserCircle, Search, ClipboardList } from 'lucide-react'
 
 // ─── Komponen kecil ────────────────────────────────────────────────────────
 
@@ -32,7 +33,9 @@ function ConfirmDialog({ isOpen, action, workerName, onConfirm, onCancel, loadin
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
       <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
-        <p className="text-2xl text-center">{isAccept ? '✅' : '❌'}</p>
+        <div className="flex justify-center mb-1">
+          {isAccept ? <CheckCircle2 size={32} className="text-emerald-500" /> : <XCircle size={32} className="text-red-500" />}
+        </div>
         <h3 className="mt-3 text-center font-semibold text-slate-900">
           {isAccept ? 'Terima pelamar?' : 'Tolak pelamar?'}
         </h3>
@@ -81,7 +84,16 @@ function ApplicantCard({ application, workerSlotFull, onAction, hasAssignment, o
       {/* Baris atas: nama + badge status */}
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-semibold text-slate-900">{worker.full_name}</p>
+          {worker.worker_profile_id ? (
+            <Link
+              to={`/profiles/worker/${worker.worker_profile_id}`}
+              className="font-semibold text-slate-900 hover:text-blue-600 hover:underline underline-offset-2 transition-colors"
+            >
+              {worker.full_name}
+            </Link>
+          ) : (
+            <p className="font-semibold text-slate-900">{worker.full_name}</p>
+          )}
           <p className="text-xs text-slate-400">{worker.email}</p>
         </div>
         <StatusBadge status={status} />
@@ -89,7 +101,7 @@ function ApplicantCard({ application, workerSlotFull, onAction, hasAssignment, o
 
       {/* Rating */}
       <div className="mt-2 flex items-center gap-1.5">
-        <span className="text-amber-400 text-sm">★</span>
+        <Star size={13} className="text-amber-400 fill-amber-400 shrink-0" />
         <span className="text-sm font-medium text-slate-700">
           {worker.rating_avg > 0 ? worker.rating_avg.toFixed(1) : '—'}
         </span>
@@ -143,15 +155,15 @@ function ApplicantCard({ application, workerSlotFull, onAction, hasAssignment, o
                 ? 'Kuota worker sudah terpenuhi'
                 : `Terima ${worker.full_name}`
             }
-            className="flex-1 rounded-xl bg-emerald-600 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex-1 rounded-xl bg-emerald-600 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 flex items-center justify-center gap-1"
           >
-            ✓ Terima
+            <CheckCircle2 size={12} /> Terima
           </button>
           <button
             onClick={() => onAction(application, 'rejected')}
-            className="flex-1 rounded-xl border border-red-200 py-2 text-xs font-semibold text-red-600 hover:bg-red-50"
+            className="flex-1 rounded-xl border border-red-200 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 flex items-center justify-center gap-1"
           >
-            ✕ Tolak
+            <XCircle size={12} /> Tolak
           </button>
         </div>
       )}
@@ -169,7 +181,7 @@ function ApplicantCard({ application, workerSlotFull, onAction, hasAssignment, o
           {isAssigned ? (
             <div className="space-y-2">
               <div className="flex items-center gap-2 rounded-xl bg-emerald-50 border border-emerald-200 px-3 py-2.5">
-                <span className="text-emerald-600">✓</span>
+                <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
                 <p className="text-xs font-semibold text-emerald-700">
                   Sudah ditugaskan
                 </p>
@@ -178,7 +190,7 @@ function ApplicantCard({ application, workerSlotFull, onAction, hasAssignment, o
                 onClick={() => onViewProgress(assignmentId)}
                 className="w-full rounded-xl bg-blue-600 py-2.5 text-xs font-semibold text-white hover:bg-blue-700 transition"
               >
-                🔍 Lihat Progress & Tinjau Hasil
+                <Search size={12} className="inline mr-1" />Lihat Progress & Tinjau Hasil
               </button>
             </div>
           ) : (
@@ -187,7 +199,7 @@ function ApplicantCard({ application, workerSlotFull, onAction, hasAssignment, o
               disabled={assignLoading === application.id}
               className="w-full rounded-xl bg-blue-600 py-2.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60 transition"
             >
-              {assignLoading === application.id ? 'Memproses...' : '📋 Tugaskan Worker Ini'}
+              {assignLoading === application.id ? 'Memproses...' : <><ClipboardList size={12} className="inline mr-1" />Tugaskan Worker Ini</>}
             </button>
           )}
         </div>
@@ -341,7 +353,7 @@ export default function TaskApplications() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
         <div className="w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-lg">
-          <p className="text-3xl">⚠️</p>
+          <AlertTriangle size={36} className="mx-auto text-amber-400" />
           <h2 className="mt-3 font-semibold text-slate-900">Terjadi kesalahan</h2>
           <p className="mt-2 text-sm text-slate-500">{error}</p>
           <button
@@ -410,7 +422,7 @@ export default function TaskApplications() {
 
             {workerSlotFull && (
               <p className="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-center text-xs font-medium text-emerald-700">
-                ✓ Kuota worker sudah terpenuhi ({task?.worker_needed} dari {task?.worker_needed})
+                Kuota worker sudah terpenuhi ({task?.worker_needed} dari {task?.worker_needed})
               </p>
             )}
           </section>
@@ -418,26 +430,26 @@ export default function TaskApplications() {
           {/* ── Error aksi accept/reject ── */}
           {actionError && (
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              ⚠ {actionError}
+              {actionError}
             </div>
           )}
 
           {/* ── Error / sukses aksi assign ── */}
           {assignError && (
             <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-              ⚠ {assignError}
+              {assignError}
             </div>
           )}
           {assignSuccess && (
             <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-              ✓ {assignSuccess}
+              {assignSuccess}
             </div>
           )}
 
           {/* ── Empty state ── */}
           {applications.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-300 bg-white py-12 text-center">
-              <p className="text-3xl">👤</p>
+              <UserCircle size={36} className="mx-auto text-slate-300" />
               <p className="mt-2 text-sm font-medium text-slate-600">
                 Belum ada pelamar
               </p>

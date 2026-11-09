@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchMyTasks } from '../lib/api'
+import { AlertTriangle, ClipboardList } from 'lucide-react'
 
 // ─── Komponen kecil ────────────────────────────────────────────────────────
 
@@ -67,7 +68,7 @@ export default function ApplicationManagement() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
         <div className="w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-lg">
-          <p className="text-3xl">⚠️</p>
+          <AlertTriangle size={36} className="mx-auto text-amber-400" />
           <h2 className="mt-3 font-semibold text-slate-900">Gagal memuat tugas</h2>
           <p className="mt-2 text-sm text-slate-500">{error}</p>
           <button
@@ -110,7 +111,7 @@ export default function ApplicationManagement() {
         {/* ── Empty state ── */}
         {tasks.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white py-12 text-center">
-            <p className="text-3xl">📋</p>
+            <ClipboardList size={28} className="mx-auto text-slate-300" />
             <p className="mt-2 text-sm font-medium text-slate-600">
               Belum ada tugas yang dibuat
             </p>
@@ -180,7 +181,7 @@ function TaskCard({ task, onClick }) {
       </div>
       {task.status === 'draft' && (
         <p className="mt-2 text-xs text-amber-600 font-medium">
-          ⚠ Publish tugas ini agar bisa menerima lamaran
+          Publish tugas ini agar bisa menerima lamaran
         </p>
       )}
     </button>

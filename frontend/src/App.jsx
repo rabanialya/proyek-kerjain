@@ -3,6 +3,7 @@ import { AuthProvider } from './context/AuthContext'
 import ProtectedRoute from './components/ProtectedRoute'
 import AdminProtectedRoute from './components/AdminProtectedRoute'
 
+import LandingPage from './pages/LandingPage'
 import Login from './pages/Login'
 import Register from './pages/Register'
 import DashboardRole from './pages/DashboardRole'
@@ -25,6 +26,8 @@ import JobDetailPage from './pages/JobDetailPage'
 import EmployerJobsPage from './pages/EmployerJobsPage'
 import EmployerJobDetailPage from './pages/EmployerJobDetailPage'
 import NotificationsPage from './pages/NotificationsPage'
+import PublicWorkerProfilePage from './pages/PublicWorkerProfilePage'
+import PublicEmployerProfilePage from './pages/PublicEmployerProfilePage'
 
 // Admin
 import AdminLayout from './layouts/AdminLayout'
@@ -34,6 +37,12 @@ import AdminPaymentDetailPage from './pages/admin/AdminPaymentDetailPage'
 import AdminDisputesPage from './pages/admin/AdminDisputesPage'
 import AdminDisputeDetailPage from './pages/admin/AdminDisputeDetailPage'
 import AdminActivityLogsPage from './pages/admin/AdminActivityLogsPage'
+import AdminUsersPage from './pages/admin/AdminUsersPage'
+import AdminUserDetailPage from './pages/admin/AdminUserDetailPage'
+import AdminTaskSettingsPage from './pages/admin/AdminTaskSettingsPage'
+import AdminReportsPage from './pages/admin/AdminReportsPage'
+import AdminReportDetailPage from './pages/admin/AdminReportDetailPage'
+import AdminNotificationsPage from './pages/admin/AdminNotificationsPage'
 
 /**
  * Routing struktur:
@@ -57,6 +66,8 @@ import AdminActivityLogsPage from './pages/admin/AdminActivityLogsPage'
  * /worker/jobs/:assignmentId → JobDetailPage (detail satu pekerjaan)
  * /employer/jobs       → EmployerJobsPage     (pekerjaan aktif employer)
  * /employer/jobs/:assignmentId → EmployerJobDetailPage (review bukti & approve)
+ * /profiles/worker/:profileId  → PublicWorkerProfilePage (profil publik worker)
+ * /profiles/employer/:profileId → PublicEmployerProfilePage (profil publik employer)
  *
  * (admin only — butuh is_admin = true)
  * /admin              → AdminDashboardPage
@@ -65,6 +76,11 @@ import AdminActivityLogsPage from './pages/admin/AdminActivityLogsPage'
  * /admin/disputes     → AdminDisputesPage
  * /admin/disputes/:disputeId  → AdminDisputeDetailPage
  * /admin/activity-logs → AdminActivityLogsPage
+ * /admin/users        → AdminUsersPage
+ * /admin/users/:userId → AdminUserDetailPage
+ * /admin/task-settings → AdminTaskSettingsPage
+ * /admin/reports      → AdminReportsPage
+ * /admin/reports/:reportId → AdminReportDetailPage
  *
  * /                   → redirect ke /dashboard
  * *                   → redirect ke /dashboard (fallback)
@@ -74,6 +90,9 @@ function App() {
     <BrowserRouter>
       <AuthProvider>
         <Routes>
+          {/* Landing page — publik, redirect otomatis jika sudah login */}
+          <Route path="/" element={<LandingPage />} />
+
           {/* Halaman publik */}
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -100,6 +119,8 @@ function App() {
             <Route path="/employer/jobs" element={<EmployerJobsPage />} />
             <Route path="/employer/jobs/:assignmentId" element={<EmployerJobDetailPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
+            <Route path="/profiles/worker/:profileId" element={<PublicWorkerProfilePage />} />
+            <Route path="/profiles/employer/:profileId" element={<PublicEmployerProfilePage />} />
           </Route>
 
           {/* Halaman Admin — hanya user dengan is_admin = true */}
@@ -111,12 +132,17 @@ function App() {
               <Route path="/admin/disputes" element={<AdminDisputesPage />} />
               <Route path="/admin/disputes/:disputeId" element={<AdminDisputeDetailPage />} />
               <Route path="/admin/activity-logs" element={<AdminActivityLogsPage />} />
+              <Route path="/admin/users" element={<AdminUsersPage />} />
+              <Route path="/admin/users/:userId" element={<AdminUserDetailPage />} />
+              <Route path="/admin/task-settings" element={<AdminTaskSettingsPage />} />
+              <Route path="/admin/reports" element={<AdminReportsPage />} />
+              <Route path="/admin/reports/:reportId" element={<AdminReportDetailPage />} />
+              <Route path="/admin/notifications" element={<AdminNotificationsPage />} />
             </Route>
           </Route>
 
-          {/* Fallback */}
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          {/* Fallback — URL tidak dikenal */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>
     </BrowserRouter>

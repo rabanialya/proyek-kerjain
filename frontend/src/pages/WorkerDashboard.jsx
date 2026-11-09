@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useDashboardWorker } from '../hooks/useDashboardWorker'
+import { AlertTriangle, MapPin, Briefcase, ClipboardList } from 'lucide-react'
 import NotificationBell from '../components/NotificationBell'
 
 // ─── Komponen kecil ────────────────────────────────────────────────────────
@@ -128,7 +129,7 @@ export default function WorkerDashboard() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
         <div className="w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-lg">
-          <p className="text-3xl">⚠️</p>
+          <AlertTriangle size={36} className="mx-auto text-amber-400" />
           <h2 className="mt-3 font-semibold text-slate-900">
             Gagal memuat dashboard
           </h2>
@@ -175,8 +176,8 @@ export default function WorkerDashboard() {
                       : user?.full_name}
                   </h1>
                   {workerProfile?.location && (
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      📍 {workerProfile.location}
+                    <p className="mt-0.5 text-xs text-slate-500 flex items-center gap-1">
+                      <MapPin size={11} className="shrink-0" /> {workerProfile.location}
                     </p>
                   )}
                 </div>
@@ -269,8 +270,8 @@ export default function WorkerDashboard() {
           >
             <div className="flex items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-xl">
-                  💼
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50">
+                  <Briefcase size={20} className="text-blue-600" />
                 </div>
                 <div>
                   <p className="font-semibold text-slate-900">
@@ -329,7 +330,7 @@ export default function WorkerDashboard() {
           />
           {recentTasks.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-slate-300 py-10 text-center">
-              <p className="text-2xl">📋</p>
+              <ClipboardList size={28} className="mx-auto text-slate-300" />
               <p className="mt-2 text-sm font-medium text-slate-600">
                 Belum ada tugas yang tersedia
               </p>

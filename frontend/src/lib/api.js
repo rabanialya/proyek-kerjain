@@ -79,6 +79,98 @@ export async function fetchMyEmployerProfile() {
   return apiRequestAuth('/profiles/employer')
 }
 
+// ─── Avatar / Foto Profil ──────────────────────────────────────────────────
+
+/**
+ * Upload atau ganti foto profil user yang sedang login.
+ * POST /profiles/avatar  (multipart/form-data, field: "file")
+ *
+ * @param {File} file  File gambar (JPEG / PNG / WEBP, maks 5 MB)
+ * @returns {Promise<{ avatar_url: string, message: string }>}
+ */
+export async function uploadAvatar(file) {
+  const token = getAuthToken()
+  if (!token) throw new Error('Tidak ada sesi aktif. Silakan login kembali.')
+
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await fetch(`${API_BASE_URL}/profiles/avatar`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  })
+
+  const data = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    const message =
+      typeof data?.detail === 'string'
+        ? data.detail
+        : Array.isArray(data?.detail)
+          ? data.detail.map((e) => e.msg ?? String(e)).join('; ')
+          : 'Gagal mengunggah foto profil.'
+    throw new Error(message)
+  }
+
+  return data
+}
+
+/**
+ * Ambil foto profil milik user yang sedang login sebagai object URL sementara.
+ * GET /files/avatar
+ * Revoke object URL setelah tidak diperlukan: URL.revokeObjectURL(url)
+ *
+ * @returns {Promise<string>}  Object URL sementara
+ */
+export async function fetchMyAvatarUrl() {
+  const token = getAuthToken()
+  if (!token) throw new Error('Tidak ada sesi aktif. Silakan login kembali.')
+
+  const response = await fetch(`${API_BASE_URL}/files/avatar`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    // 404 berarti belum ada foto — kembalikan null, bukan throw
+    if (response.status === 404) return null
+    const data = await response.json().catch(() => null)
+    const message =
+      typeof data?.detail === 'string' ? data.detail : 'Gagal memuat foto profil.'
+    throw new Error(message)
+  }
+
+  const blob = await response.blob()
+  return URL.createObjectURL(blob)
+}
+
+/**
+ * Ambil foto profil user lain berdasarkan user ID sebagai object URL sementara.
+ * GET /files/avatar/{userId}
+ *
+ * @param {string} userId  UUID user
+ * @returns {Promise<string|null>}  Object URL sementara, atau null jika belum ada foto
+ */
+export async function fetchUserAvatarUrl(userId) {
+  const token = getAuthToken()
+  if (!token) throw new Error('Tidak ada sesi aktif. Silakan login kembali.')
+
+  const response = await fetch(`${API_BASE_URL}/files/avatar/${userId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    if (response.status === 404) return null
+    const data = await response.json().catch(() => null)
+    const message =
+      typeof data?.detail === 'string' ? data.detail : 'Gagal memuat foto profil.'
+    throw new Error(message)
+  }
+
+  const blob = await response.blob()
+  return URL.createObjectURL(blob)
+}
+
 // ─── Tasks ─────────────────────────────────────────────────────────────────
 
 // GET /tasks — semua task berstatus published (endpoint publik, tidak butuh token).
@@ -267,6 +359,17 @@ export async function fetchCategories() {
   return apiRequest('/categories')
 }
 
+// POST /categories — buat kategori baru dengan nama yang diinput employer.
+// Jika kategori dengan nama yang sama sudah ada, backend mengembalikan error 400.
+// body: { name: string }
+// Response: CategoryResponse { id, name, is_active }
+export async function createCategory(name) {
+  return apiRequestAuth('/categories', {
+    method: 'POST',
+    body: JSON.stringify({ name: name.trim() }),
+  })
+}
+
 // ─── Update Profile ─────────────────────────────────────────────────────────
 
 // PUT /profiles/worker — partial update profil Worker.
@@ -277,6 +380,70 @@ export async function updateWorkerProfile(body) {
     method: 'PUT',
     body: JSON.stringify(body),
   })
+}
+
+/**
+ * Upload dokumen Worker ke server.
+ * POST /profiles/worker/documents/{docType}  (multipart/form-data, field: "file")
+ *
+ * @param {'cv'|'id'} docType  Jenis dokumen: 'cv' (CV/Resume) atau 'id' (KTP/KTM)
+ * @param {File} file          File yang akan diunggah (JPG/PNG/WEBP/PDF, maks 10 MB)
+ * @returns {Promise<{ doc_type: string, message: string }>}
+ */
+export async function uploadWorkerDocument(docType, file) {
+  const token = getAuthToken()
+  if (!token) throw new Error('Tidak ada sesi aktif. Silakan login kembali.')
+
+  const formData = new FormData()
+  formData.append('file', file)
+
+  const response = await fetch(`${API_BASE_URL}/profiles/worker/documents/${docType}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  })
+
+  const data = await response.json().catch(() => null)
+
+  if (!response.ok) {
+    const message =
+      typeof data?.detail === 'string'
+        ? data.detail
+        : Array.isArray(data?.detail)
+          ? data.detail.map((e) => e.msg ?? String(e)).join('; ')
+          : 'Gagal mengunggah dokumen.'
+    throw new Error(message)
+  }
+
+  return data
+}
+
+/**
+ * Ambil file dokumen Worker milik user yang sedang login sebagai object URL sementara.
+ * GET /files/worker-docs/{docType}
+ * Revoke object URL setelah tidak diperlukan: URL.revokeObjectURL(url)
+ *
+ * @param {'cv'|'id'} docType  Jenis dokumen: 'cv' atau 'id'
+ * @returns {Promise<string|null>}  Object URL sementara, atau null jika belum ada
+ */
+export async function fetchWorkerDocumentUrl(docType) {
+  const token = getAuthToken()
+  if (!token) throw new Error('Tidak ada sesi aktif. Silakan login kembali.')
+
+  const response = await fetch(`${API_BASE_URL}/files/worker-docs/${docType}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+
+  if (!response.ok) {
+    if (response.status === 404) return null
+    const data = await response.json().catch(() => null)
+    const message =
+      typeof data?.detail === 'string' ? data.detail : 'Gagal memuat dokumen.'
+    throw new Error(message)
+  }
+
+  const blob = await response.blob()
+  return URL.createObjectURL(blob)
 }
 
 // PUT /profiles/employer — partial update profil Employer.
@@ -658,6 +825,17 @@ export async function adminFetchTaskDetail(taskId) {
   return apiRequestAuth(`/admin/tasks/${taskId}`)
 }
 
+// PUT /admin/tasks/:taskId/status — ubah status task (draft/published/closed).
+// Menggunakan FormData karena endpoint menerima Form parameter.
+export async function adminUpdateTaskStatus(taskId, status) {
+  const formData = new FormData()
+  formData.append('status', status)
+  return apiRequestAuth(`/admin/tasks/${taskId}/status`, {
+    method: 'PUT',
+    body: formData,
+  })
+}
+
 // ── Admin: Reports ──────────────────────────────────────────────────────────
 
 // GET /admin/reports — semua laporan.
@@ -670,13 +848,37 @@ export async function adminFetchReportDetail(reportId) {
   return apiRequestAuth(`/admin/reports/${reportId}`)
 }
 
-// PUT /admin/reports/:reportId/resolve — selesaikan laporan.
-// body: { resolution: string }
+// PUT /admin/reports/:reportId/status — perbarui status + catatan laporan.
+// body: { status, admin_notes?, resolution? }
+// status: open | pending | under_review | resolved | rejected
+export async function adminUpdateReportStatus(reportId, body) {
+  return apiRequestAuth(`/admin/reports/${reportId}/status`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+}
+
+// PUT /admin/reports/:reportId/resolve — [deprecated] selesaikan laporan.
+// Gunakan adminUpdateReportStatus dengan status 'resolved'.
 export async function adminResolveReport(reportId, body) {
   return apiRequestAuth(`/admin/reports/${reportId}/resolve`, {
     method: 'PUT',
     body: JSON.stringify(body),
   })
+}
+
+// POST /reports — pengguna membuat laporan baru.
+// body: { reported_user_id?, reported_task_id?, reason_category?, subject, description }
+export async function createReport(body) {
+  return apiRequestAuth('/reports', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+// GET /reports/my — laporan yang dibuat user yang login.
+export async function fetchMyReports() {
+  return apiRequestAuth('/reports/my')
 }
 
 
@@ -705,4 +907,20 @@ export async function markNotificationRead(notificationId) {
   return apiRequestAuth(`/notifications/${notificationId}/read`, {
     method: 'PUT',
   })
+}
+
+// ─── Public Profiles ───────────────────────────────────────────────────────
+
+// GET /profiles/worker/:profileId/public — profil publik Worker berdasarkan WorkerProfile ID.
+// Membutuhkan autentikasi. Mengembalikan informasi publik saja (tanpa email/telepon).
+// profileId: UUID dari WorkerProfile (bukan User ID)
+export async function fetchPublicWorkerProfile(profileId) {
+  return apiRequestAuth(`/profiles/worker/${profileId}/public`)
+}
+
+// GET /profiles/employer/:profileId/public — profil publik Employer berdasarkan EmployerProfile ID.
+// Membutuhkan autentikasi. Mengembalikan informasi publik saja (tanpa contact_email/whatsapp).
+// profileId: UUID dari EmployerProfile (bukan User ID)
+export async function fetchPublicEmployerProfile(profileId) {
+  return apiRequestAuth(`/profiles/employer/${profileId}/public`)
 }

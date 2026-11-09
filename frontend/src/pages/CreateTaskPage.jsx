@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { createTask, fetchCategories, publishTask } from '../lib/api'
+import { createCategory, createTask, fetchCategories, publishTask } from '../lib/api'
 
 // ─── Konstanta ─────────────────────────────────────────────────────────────
 
@@ -21,6 +21,7 @@ const WAGE_RATE_OPTIONS = [
   { value: 'daily',      label: 'Per Hari' },
   { value: 'hourly',     label: 'Per Jam' },
   { value: 'per_output', label: 'Per Output / Task' },
+  { value: 'monthly',    label: 'Bulanan' },
 ]
 
 const REQUIREMENT_FLAG_OPTIONS = [
@@ -203,6 +204,13 @@ export default function CreateTaskPage() {
   const [submitError, setSubmitError]     = useState(null)
   const submittingRef = useRef(false)
 
+  // State untuk input kategori kustom
+  const [customCatName, setCustomCatName]   = useState('')
+  const [customCatError, setCustomCatError] = useState(null)
+
+  // Konstanta penanda pilihan "ketik sendiri"
+  const CUSTOM_CAT_VALUE = '__custom__'
+
   // Ambil kategori
   useEffect(() => {
     let active = true
@@ -218,6 +226,11 @@ export default function CreateTaskPage() {
     const { name, value } = e.target
     setFields(prev => ({ ...prev, [name]: value }))
     if (errors[name]) setErrors(prev => { const n = { ...prev }; delete n[name]; return n })
+    // Reset custom category state ketika dropdown kategori berubah
+    if (name === 'category_id') {
+      setCustomCatName('')
+      setCustomCatError(null)
+    }
   }
 
   function handleFlagChange(value) {
@@ -233,7 +246,27 @@ export default function CreateTaskPage() {
     if (submittingRef.current) return
     submittingRef.current = true
 
-    const fieldErrors = validate(fields, publishAfter)
+    // Validasi nama kategori kustom jika dipilih
+    if (fields.category_id === CUSTOM_CAT_VALUE) {
+      if (!customCatName.trim()) {
+        setCustomCatError('Nama kategori tidak boleh kosong.')
+        submittingRef.current = false
+        return
+      }
+      if (customCatName.trim().length < 2) {
+        setCustomCatError('Nama kategori minimal 2 karakter.')
+        submittingRef.current = false
+        return
+      }
+    }
+
+    const fieldErrors = validate(
+      // Saat validasi, category_id CUSTOM_CAT_VALUE dianggap sudah diisi jika nama terisi
+      fields.category_id === CUSTOM_CAT_VALUE && customCatName.trim()
+        ? { ...fields, category_id: 'filled' }
+        : fields,
+      publishAfter
+    )
     if (Object.keys(fieldErrors).length > 0) {
       setErrors(fieldErrors)
       submittingRef.current = false
@@ -241,11 +274,37 @@ export default function CreateTaskPage() {
     }
 
     setErrors({})
+    setCustomCatError(null)
     setSubmitting(true)
     setSubmitError(null)
 
     try {
-      const payload = buildPayload(fields)
+      let resolvedCategoryId = fields.category_id
+
+      // Jika user memilih "Ketik sendiri", buat kategori baru dulu
+      if (fields.category_id === CUSTOM_CAT_VALUE) {
+        try {
+          const newCat = await createCategory(customCatName)
+          resolvedCategoryId = newCat.id
+          // Tambahkan ke daftar lokal agar tidak perlu reload
+          setCategories(prev => [...prev, newCat])
+        } catch (catErr) {
+          // Kategori mungkin sudah ada — cari di daftar yang ada
+          const existing = categories.find(
+            c => c.name.toLowerCase() === customCatName.trim().toLowerCase()
+          )
+          if (existing) {
+            resolvedCategoryId = existing.id
+          } else {
+            setCustomCatError(catErr.message ?? 'Gagal membuat kategori baru.')
+            setSubmitting(false)
+            submittingRef.current = false
+            return
+          }
+        }
+      }
+
+      const payload = buildPayload({ ...fields, category_id: resolvedCategoryId })
       const created = await createTask(payload)
 
       if (publishAfter) {
@@ -309,11 +368,33 @@ export default function CreateTaskPage() {
             ) : catError ? (
               <p className="mt-1 text-xs text-red-600">{catError}</p>
             ) : (
-              <select id="category_id" name="category_id" value={fields.category_id}
-                onChange={handleChange} disabled={submitting} className={inp}>
-                <option value="">-- Pilih kategori --</option>
-                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <div className="space-y-2">
+                <select id="category_id" name="category_id" value={fields.category_id}
+                  onChange={handleChange} disabled={submitting} className={inp}>
+                  <option value="">-- Pilih kategori --</option>
+                  {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  <option value={CUSTOM_CAT_VALUE}>Ketik kategori sendiri…</option>
+                </select>
+                {fields.category_id === CUSTOM_CAT_VALUE && (
+                  <div>
+                    <input
+                      type="text"
+                      placeholder="Nama kategori baru, contoh: Pertanian"
+                      value={customCatName}
+                      onChange={e => { setCustomCatName(e.target.value); setCustomCatError(null) }}
+                      disabled={submitting}
+                      maxLength={60}
+                      className={inp}
+                    />
+                    {customCatError && (
+                      <p className="mt-1 text-xs text-red-600">{customCatError}</p>
+                    )}
+                    <p className="mt-1 text-xs text-slate-400">
+                      Kategori baru akan otomatis ditambahkan ke sistem.
+                    </p>
+                  </div>
+                )}
+              </div>
             )}
           </InputField>
 
