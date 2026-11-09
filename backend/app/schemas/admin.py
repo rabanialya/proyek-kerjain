@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Any, ClassVar, List, Set
+from typing import Any, ClassVar, List, Optional, Set
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
@@ -7,6 +7,62 @@ from uuid import UUID
 
 class UserStatusUpdate(BaseModel):
     is_active: bool
+
+
+# ---------------------------------------------------------------------------
+# Admin User Schemas
+# ---------------------------------------------------------------------------
+
+class WorkerProfileSummary(BaseModel):
+    """Ringkasan profil Worker untuk tampilan detail user."""
+    id: UUID
+    nickname: str | None = None
+    location: str | None = None
+    bio: str | None = None
+    skills: str | None = None
+    status_pekerjaan: str | None = None
+    rating_avg: float
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class EmployerProfileSummary(BaseModel):
+    """Ringkasan profil Employer untuk tampilan detail user."""
+    id: UUID
+    display_name: str
+    tipe_employer: str | None = None
+    sektor: str | None = None
+    location: str | None = None
+    is_verified: bool
+    rating_avg: float
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AdminUserResponse(BaseModel):
+    """Data user untuk tampilan Admin — tanpa password_hash."""
+    id: UUID
+    email: str
+    full_name: str
+    phone: str | None = None
+    avatar_url: str | None = None
+    is_admin: bool
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AdminUserDetailResponse(AdminUserResponse):
+    """Data user lengkap dengan profil worker/employer jika ada."""
+    worker_profile: WorkerProfileSummary | None = None
+    employer_profile: EmployerProfileSummary | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -135,9 +191,11 @@ class AdminStatsResponse(BaseModel):
     """Statistik ringkasan platform untuk dashboard Admin."""
     total_users: int
     active_users: int
+    inactive_users: int = 0
     total_tasks: int
     published_tasks: int
     payments_awaiting_verification: int
     open_disputes: int
     resolved_disputes: int
+    pending_reports: int = 0
     recent_activity: List[Any] = []

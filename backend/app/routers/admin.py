@@ -25,10 +25,12 @@ from app.schemas.admin import (
     AdminPaymentSummaryResponse,
     AdminDisputeResolve,
     AdminStatsResponse,
+    AdminUserResponse,
+    AdminUserDetailResponse,
 )
 from app.schemas.payment import PaymentResponse  # noqa: F401 — dipakai oleh endpoint admin payment jika diperlukan
 from app.models.report import Report
-from app.schemas.report import ReportResponse, ReportResolve
+from app.schemas.report import ReportResponse, ReportResolve, AdminReportStatusUpdate
 from app.schemas.dispute import DisputeResponse
 from app.models.activity_log import ActivityLog
 from app.schemas.activity_log import ActivityLogResponse
@@ -74,6 +76,9 @@ def get_admin_stats(
     active_users = session.exec(
         select(func.count(User.id)).where(User.is_active == True)  # noqa: E712
     ).one()
+    inactive_users = session.exec(
+        select(func.count(User.id)).where(User.is_active == False)  # noqa: E712
+    ).one()
     total_tasks = session.exec(select(func.count(Task.id))).one()
     published_tasks = session.exec(
         select(func.count(Task.id)).where(Task.status == "published")
@@ -90,6 +95,11 @@ def get_admin_stats(
     resolved_disputes = session.exec(
         select(func.count(Dispute.id)).where(Dispute.status == "resolved")
     ).one()
+    pending_reports = session.exec(
+        select(func.count(Report.id)).where(
+            Report.status.in_(["open", "pending", "under_review"])  # noqa: E712
+        )
+    ).one()
     recent_logs = session.exec(
         select(ActivityLog)
         .order_by(ActivityLog.created_at.desc())
@@ -99,11 +109,13 @@ def get_admin_stats(
     return AdminStatsResponse(
         total_users=total_users,
         active_users=active_users,
+        inactive_users=inactive_users,
         total_tasks=total_tasks,
         published_tasks=published_tasks,
         payments_awaiting_verification=awaiting_verification,
         open_disputes=open_disputes,
         resolved_disputes=resolved_disputes,
+        pending_reports=pending_reports,
         recent_activity=[
             {
                 "id": str(log.id),
@@ -118,24 +130,36 @@ def get_admin_stats(
     )
 
 
-@router.get("/users")
+@router.get(
+    "/users",
+    response_model=list[AdminUserResponse],
+    summary="Daftar semua pengguna (Admin)",
+)
 def get_all_users(
     session: Session = Depends(get_session),
     current_admin: User = Depends(get_current_admin),
 ):
+    """Mengembalikan semua user terdaftar, diurutkan terbaru dulu. Tanpa password_hash."""
     users = session.exec(
         select(User).order_by(User.created_at.desc())
     ).all()
-
     return users
 
 
-@router.get("/users/{user_id}")
+@router.get(
+    "/users/{user_id}",
+    response_model=AdminUserDetailResponse,
+    summary="Detail pengguna beserta profil (Admin)",
+)
 def get_user_detail(
     user_id: UUID,
     session: Session = Depends(get_session),
     current_admin: User = Depends(get_current_admin),
 ):
+    """
+    Mengembalikan data user lengkap beserta profil Worker dan Employer jika ada.
+    Tidak menyertakan password_hash atau data autentikasi.
+    """
     user = session.get(User, user_id)
 
     if not user:
@@ -144,15 +168,49 @@ def get_user_detail(
             detail="User tidak ditemukan"
         )
 
-    return user
+    # Ambil profil worker jika ada
+    worker_profile = session.exec(
+        select(WorkerProfile).where(WorkerProfile.user_id == user_id)
+    ).first()
 
-@router.put("/users/{user_id}/status")
+    # Ambil profil employer jika ada
+    employer_profile = session.exec(
+        select(EmployerProfile).where(EmployerProfile.user_id == user_id)
+    ).first()
+
+    return AdminUserDetailResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        phone=user.phone,
+        avatar_url=user.avatar_url,
+        is_admin=user.is_admin,
+        is_active=user.is_active,
+        created_at=user.created_at,
+        updated_at=user.updated_at,
+        worker_profile=worker_profile,
+        employer_profile=employer_profile,
+    )
+
+@router.put(
+    "/users/{user_id}/status",
+    response_model=AdminUserResponse,
+    summary="Aktifkan / nonaktifkan akun pengguna (Admin)",
+)
 def update_user_status(
     user_id: UUID,
     data: UserStatusUpdate,
     session: Session = Depends(get_session),
     current_admin: User = Depends(get_current_admin),
 ):
+    """
+    Admin mengubah status aktif/nonaktif user.
+
+    Ketentuan:
+    - Admin tidak dapat menonaktifkan akunnya sendiri.
+    - Akun Admin lain tidak dapat dinonaktifkan.
+    - Perubahan status dicatat di activity log.
+    """
     user = session.get(User, user_id)
 
     if not user:
@@ -164,39 +222,58 @@ def update_user_status(
     if user.id == current_admin.id:
         raise HTTPException(
             status_code=400,
-            detail="Admin tidak dapat menonaktifkan akun sendiri"
+            detail="Admin tidak dapat mengubah status akun sendiri"
         )
 
+    if user.is_admin and not data.is_active:
+        raise HTTPException(
+            status_code=400,
+            detail="Akun Admin lain tidak dapat dinonaktifkan"
+        )
+
+    old_status = user.is_active
     user.is_active = data.is_active
+    user.updated_at = datetime.now(timezone.utc)
 
     session.add(user)
+
+    # Catat perubahan ke activity log
+    log_activity(
+        session,
+        user_id=current_admin.id,
+        entity_type="user",
+        entity_id=user.id,
+        action="update_user_status",
+        old_value={"is_active": old_status},
+        new_value={"is_active": data.is_active},
+    )
+
     session.commit()
     session.refresh(user)
 
-    return {
-        "message": "Status user berhasil diperbarui",
-        "user_id": user.id,
-        "is_active": user.is_active
-    }
+    return user
 
 @router.get(
     "/reports",
-    response_model=list[ReportResponse]
+    response_model=list[ReportResponse],
+    summary="Daftar semua laporan (Admin)",
 )
 def get_all_reports(
     session: Session = Depends(get_session),
     current_admin: User = Depends(get_current_admin),
 ):
+    """Mengembalikan semua laporan, diurutkan terbaru dulu."""
     reports = session.exec(
         select(Report)
         .order_by(Report.created_at.desc())
     ).all()
-
     return reports
+
 
 @router.get(
     "/reports/{report_id}",
-    response_model=ReportResponse
+    response_model=ReportResponse,
+    summary="Detail satu laporan (Admin)",
 )
 def get_report_detail(
     report_id: UUID,
@@ -204,18 +281,84 @@ def get_report_detail(
     current_admin: User = Depends(get_current_admin),
 ):
     report = session.get(Report, report_id)
-
     if not report:
+        raise HTTPException(status_code=404, detail="Report tidak ditemukan")
+    return report
+
+
+@router.put(
+    "/reports/{report_id}/status",
+    response_model=ReportResponse,
+    summary="Admin perbarui status dan catatan laporan",
+)
+def update_report_status(
+    report_id: UUID,
+    data: AdminReportStatusUpdate,
+    session: Session = Depends(get_session),
+    current_admin: User = Depends(get_current_admin),
+):
+    """
+    Admin memperbarui status laporan dan/atau catatan penanganan.
+
+    Status yang valid: open | pending | under_review | resolved | rejected
+
+    - resolved / rejected → wajib mengisi resolution.
+    - Status lain → resolution opsional.
+    - admin_notes selalu opsional.
+    """
+    valid_statuses = {"open", "pending", "under_review", "resolved", "rejected"}
+    if data.status not in valid_statuses:
         raise HTTPException(
-            status_code=404,
-            detail="Report tidak ditemukan"
+            status_code=400,
+            detail=f"Status tidak valid. Pilihan: {', '.join(sorted(valid_statuses))}",
         )
 
+    report = session.get(Report, report_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Report tidak ditemukan")
+
+    # Wajib isi resolution jika resolved/rejected
+    if data.status in {"resolved", "rejected"} and not (data.resolution or report.resolution):
+        raise HTTPException(
+            status_code=400,
+            detail="Keterangan penyelesaian (resolution) wajib diisi untuk status resolved/rejected.",
+        )
+
+    old_status = report.status
+    report.status = data.status
+
+    if data.admin_notes is not None:
+        report.admin_notes = data.admin_notes
+
+    if data.resolution is not None:
+        report.resolution = data.resolution
+
+    if data.status in {"resolved", "rejected"} and not report.resolved_by:
+        report.resolved_by = current_admin.id
+        report.resolved_at = datetime.now(timezone.utc)
+
+    session.add(report)
+
+    log_activity(
+        session,
+        user_id=current_admin.id,
+        entity_type="report",
+        entity_id=report.id,
+        action="update_report_status",
+        old_value={"status": old_status},
+        new_value={"status": data.status},
+    )
+
+    session.commit()
+    session.refresh(report)
     return report
+
 
 @router.put(
     "/reports/{report_id}/resolve",
-    response_model=ReportResponse
+    response_model=ReportResponse,
+    summary="[Deprecated] Selesaikan laporan — gunakan /status",
+    deprecated=True,
 )
 def resolve_report(
     report_id: UUID,
@@ -223,19 +366,13 @@ def resolve_report(
     session: Session = Depends(get_session),
     current_admin: User = Depends(get_current_admin),
 ):
+    """Endpoint lama — tetap berfungsi untuk kompatibilitas mundur."""
     report = session.get(Report, report_id)
-
     if not report:
-        raise HTTPException(
-            status_code=404,
-            detail="Report tidak ditemukan"
-        )
+        raise HTTPException(status_code=404, detail="Report tidak ditemukan")
 
     if report.status == "resolved":
-        raise HTTPException(
-            status_code=400,
-            detail="Report sudah diselesaikan"
-        )
+        raise HTTPException(status_code=400, detail="Report sudah diselesaikan")
 
     report.status = "resolved"
     report.resolution = data.resolution
@@ -245,7 +382,6 @@ def resolve_report(
     session.add(report)
     session.commit()
     session.refresh(report)
-
     return report
 
 @router.get(
@@ -529,7 +665,8 @@ def create_category_admin(
         )
 
     category = Category(
-        name=data.name
+        name=data.name,
+        description=data.description,
     )
 
     session.add(category)
@@ -572,6 +709,9 @@ def update_category_admin(
 
         category.name = data.name
 
+    if data.description is not None:
+        category.description = data.description
+
     if data.is_active is not None:
         category.is_active = data.is_active
 
@@ -582,7 +722,8 @@ def update_category_admin(
     return category
 
 @router.delete(
-    "/categories/{category_id}"
+    "/categories/{category_id}",
+    summary="Hapus kategori (Admin) — hanya jika tidak digunakan task",
 )
 def delete_category_admin(
     category_id: UUID,
@@ -595,6 +736,20 @@ def delete_category_admin(
         raise HTTPException(
             status_code=404,
             detail="Category tidak ditemukan",
+        )
+
+    # Cek apakah kategori masih digunakan oleh task
+    task_count = session.exec(
+        select(func.count(Task.id)).where(Task.category_id == category_id)
+    ).one()
+
+    if task_count > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Kategori tidak dapat dihapus karena masih digunakan oleh "
+                f"{task_count} task. Nonaktifkan kategori sebagai alternatif."
+            ),
         )
 
     session.delete(category)
@@ -636,6 +791,56 @@ def get_task_detail_admin(
             detail="Task tidak ditemukan"
         )
 
+    return task
+
+
+@router.put(
+    "/tasks/{task_id}/status",
+    response_model=TaskResponse,
+    summary="Admin ubah status task (publish/unpublish/close)",
+)
+def update_task_status_admin(
+    task_id: UUID,
+    session: Session = Depends(get_session),
+    current_admin: User = Depends(get_current_admin),
+    status: str = Form(description="Status baru: published | draft | closed"),
+):
+    """
+    Admin dapat mengubah status task:
+      - draft      : sembunyikan dari pencarian Worker
+      - published  : tampilkan ke Worker
+      - closed     : tutup pendaftaran
+
+    Gunakan ini untuk menonaktifkan task yang melanggar aturan platform.
+    """
+    valid_statuses = {"draft", "published", "closed"}
+    if status not in valid_statuses:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Status tidak valid. Pilihan: {', '.join(valid_statuses)}",
+        )
+
+    task = session.get(Task, task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task tidak ditemukan")
+
+    old_status = task.status
+    task.status = status
+    task.updated_at = datetime.now(timezone.utc)
+    session.add(task)
+
+    log_activity(
+        session,
+        user_id=current_admin.id,
+        entity_type="task",
+        entity_id=task.id,
+        action="update_task_status",
+        old_value={"status": old_status},
+        new_value={"status": status},
+    )
+
+    session.commit()
+    session.refresh(task)
     return task
 
 
