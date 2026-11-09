@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 120" fill="none">
+  <defs>
+    <!-- Gradient biru untuk huruf K -->
+    <linearGradient id="kGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#1e40af"/>
+    </linearGradient>
+    <!-- Gradient untuk swoosh / orbit -->
+    <linearGradient id="swooshGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#60a5fa" stop-opacity="0.3"/>
+      <stop offset="50%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#1d4ed8" stop-opacity="0.4"/>
+    </linearGradient>
+    <!-- Shadow filter untuk K -->
+    <filter id="kShadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="1" dy="2" stdDeviation="3" flood-color="#1e40af" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- ── Huruf K (bold, gradient biru) ── -->
+  <!-- Batang vertikal kiri K -->
+  <path d="M 18 15 L 18 105 L 42 105 L 42 70 L 68 105 L 96 105 L 62 58 L 92 15 L 66 15 L 42 50 L 42 15 Z"
+        fill="url(#kGrad)" filter="url(#kShadow)"/>
+
+  <!-- ── Swoosh / orbit mengelilingi K ── -->
+  <!-- Arc atas -->
+  <path d="M 20 42 Q 55 10 95 28" stroke="url(#swooshGrad)" stroke-width="5" stroke-linecap="round" fill="none"/>
+  <!-- Arc bawah -->
+  <path d="M 95 78 Q 58 100 22 80" stroke="url(#swooshGrad)" stroke-width="5" stroke-linecap="round" fill="none"/>
+  <!-- Titik putih di ujung arc -->
+  <circle cx="96" cy="28" r="3.5" fill="white" opacity="0.9"/>
+  <circle cx="21" cy="80" r="3.5" fill="white" opacity="0.7"/>
+
+  <!-- ── Briefcase di atas K ── -->
+  <!-- Body tas -->
+  <rect x="38" y="5" width="30" height="22" rx="4" fill="#1e3a8a"/>
+  <!-- Handle tas -->
+  <path d="M 46 5 Q 46 0 53 0 Q 60 0 60 5" stroke="#1e3a8a" stroke-width="3.5" fill="none" stroke-linecap="round"/>
+  <!-- Garis tengah tas -->
+  <line x1="38" y1="16" x2="68" y2="16" stroke="#3b82f6" stroke-width="2"/>
+  <!-- Kunci tas -->
+  <rect x="50" y="13" width="6" height="6" rx="1.5" fill="#60a5fa"/>
+
+  <!-- ── Wordmark "Kerjain" ── -->
+  <!-- K -->
+  <text x="108" y="82" font-family="'Arial Black', 'Helvetica Neue', Arial, sans-serif"
+        font-size="60" font-weight="900" fill="#0f2057" letter-spacing="-1">K</text>
+  <!-- erjain (tanpa dot di i) -->
+  <text x="150" y="82" font-family="'Arial Black', 'Helvetica Neue', Arial, sans-serif"
+        font-size="60" font-weight="900" fill="#0f2057" letter-spacing="-1">erjain</text>
+
+  <!-- Dot biru di atas huruf "i" — posisi huruf i ada di sekitar x=255 -->
+  <!-- Hitung: K(108+38=146) + e(146+35=181) + r(181+33=214) + j(214+25=239) + a(239+35=274) + i(274+17=291) + n -->
+  <!-- Titik biru menggantikan titik huruf "i" -->
+  <circle cx="281" cy="24" r="7" fill="#2563eb"/>
+</svg>

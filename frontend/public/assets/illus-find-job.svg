@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 320" fill="none">
+  <!-- Background blob -->
+  <ellipse cx="210" cy="170" rx="155" ry="130" fill="#dbeafe" opacity="0.7"/>
+  <ellipse cx="90" cy="240" rx="60" ry="50" fill="#bfdbfe" opacity="0.5"/>
+
+  <!-- Desk -->
+  <rect x="100" y="230" width="180" height="10" rx="5" fill="#93c5fd"/>
+  <rect x="110" y="240" width="8" height="40" rx="3" fill="#93c5fd"/>
+  <rect x="262" y="240" width="8" height="40" rx="3" fill="#93c5fd"/>
+
+  <!-- Laptop body -->
+  <rect x="150" y="185" width="110" height="72" rx="6" fill="#1e3a8a"/>
+  <rect x="155" y="190" width="100" height="62" rx="4" fill="#1d4ed8"/>
+  <!-- Screen content lines -->
+  <rect x="162" y="198" width="55" height="5" rx="2" fill="#bfdbfe" opacity="0.8"/>
+  <rect x="162" y="207" width="40" height="4" rx="2" fill="#93c5fd" opacity="0.6"/>
+  <rect x="162" y="215" width="50" height="4" rx="2" fill="#93c5fd" opacity="0.6"/>
+  <rect x="162" y="223" width="35" height="4" rx="2" fill="#bfdbfe" opacity="0.5"/>
+  <rect x="162" y="231" width="45" height="4" rx="2" fill="#93c5fd" opacity="0.5"/>
+  <!-- Laptop keyboard base -->
+  <rect x="140" y="257" width="130" height="8" rx="4" fill="#1e3a8a"/>
+  <rect x="138" y="263" width="134" height="4" rx="2" fill="#172554"/>
+
+  <!-- Person sitting -->
+  <!-- Body -->
+  <rect x="232" y="190" width="28" height="38" rx="8" fill="#2563eb"/>
+  <!-- Head -->
+  <circle cx="246" cy="181" r="14" fill="#fbbf24"/>
+  <!-- Hair -->
+  <path d="M 232 178 Q 235 165 246 163 Q 257 165 260 178 Q 255 172 246 171 Q 237 172 232 178 Z" fill="#1e293b"/>
+  <!-- Eye -->
+  <circle cx="242" cy="180" r="2" fill="#1e293b"/>
+  <!-- Smile -->
+  <path d="M 242 185 Q 246 188 250 185" stroke="#1e293b" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <!-- Arm on laptop -->
+  <path d="M 232 210 Q 220 220 210 228" stroke="#2563eb" stroke-width="10" stroke-linecap="round"/>
+  <!-- Chair back -->
+  <rect x="260" y="185" width="8" height="55" rx="4" fill="#93c5fd"/>
+  <!-- Chair seat -->
+  <rect x="235" y="228" width="45" height="10" rx="5" fill="#60a5fa"/>
+  <!-- Chair legs -->
+  <rect x="245" y="238" width="6" height="30" rx="3" fill="#93c5fd"/>
+  <rect x="262" y="238" width="6" height="30" rx="3" fill="#93c5fd"/>
+
+  <!-- Plant (decoration) -->
+  <rect x="70" y="225" width="14" height="18" rx="3" fill="#60a5fa"/>
+  <ellipse cx="77" cy="220" rx="10" ry="12" fill="#22c55e" opacity="0.8"/>
+  <ellipse cx="70" cy="215" rx="8" ry="10" fill="#16a34a" opacity="0.7"/>
+  <ellipse cx="84" cy="217" rx="7" ry="9" fill="#15803d" opacity="0.7"/>
+
+  <!-- Browser window mockup -->
+  <rect x="100" y="100" width="140" height="100" rx="8" fill="white" stroke="#bfdbfe" stroke-width="2"/>
+  <!-- Browser bar -->
+  <rect x="100" y="100" width="140" height="18" rx="8" fill="#dbeafe"/>
+  <rect x="100" y="109" width="140" height="9" rx="0" fill="#dbeafe"/>
+  <!-- Dots -->
+  <circle cx="112" cy="109" r="3" fill="#93c5fd"/>
+  <circle cx="122" cy="109" r="3" fill="#93c5fd"/>
+  <circle cx="132" cy="109" r="3" fill="#60a5fa"/>
+  <!-- Content rows -->
+  <rect x="110" y="126" width="80" height="6" rx="3" fill="#dbeafe"/>
+  <rect x="110" y="136" width="60" height="5" rx="3" fill="#e0f2fe"/>
+  <rect x="110" y="145" width="70" height="5" rx="3" fill="#dbeafe"/>
+  <rect x="110" y="155" width="50" height="5" rx="3" fill="#e0f2fe"/>
+  <rect x="110" y="165" width="65" height="5" rx="3" fill="#dbeafe"/>
+
+  <!-- Job badges floating -->
+  <rect x="82" y="88" width="46" height="18" rx="9" fill="#1d4ed8"/>
+  <text x="105" y="101" font-size="9" font-family="sans-serif" font-weight="700" fill="white" text-anchor="middle">JOB</text>
+  <rect x="200" y="78" width="46" height="18" rx="9" fill="#1e3a8a"/>
+  <text x="223" y="91" font-size="9" font-family="sans-serif" font-weight="700" fill="white" text-anchor="middle">JOB</text>
+  <rect x="155" y="63" width="46" height="18" rx="9" fill="#2563eb"/>
+  <text x="178" y="76" font-size="9" font-family="sans-serif" font-weight="700" fill="white" text-anchor="middle">JOB</text>
+
+  <!-- Magnifying glass -->
+  <circle cx="138" cy="148" r="28" fill="none" stroke="#1d4ed8" stroke-width="7" opacity="0.8"/>
+  <line x1="158" y1="168" x2="175" y2="185" stroke="#1d4ed8" stroke-width="8" stroke-linecap="round" opacity="0.8"/>
+  <!-- Person icon in magnifier -->
+  <circle cx="136" cy="141" r="9" fill="#93c5fd" opacity="0.7"/>
+  <circle cx="136" cy="137" r="5" fill="#3b82f6"/>
+  <path d="M 127 150 Q 136 145 145 150" fill="#3b82f6"/>
+
+  <!-- Search bar -->
+  <rect x="178" y="110" width="75" height="16" rx="8" fill="white" stroke="#93c5fd" stroke-width="1.5"/>
+  <circle cx="247" cy="118" r="5" fill="none" stroke="#60a5fa" stroke-width="1.5"/>
+  <line x1="250" y1="121" x2="253" y2="124" stroke="#60a5fa" stroke-width="1.5" stroke-linecap="round"/>
+  <rect x="185" y="115" width="40" height="5" rx="2" fill="#bfdbfe"/>
+</svg>

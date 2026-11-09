@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 320" fill="none">
+  <!-- Background blobs -->
+  <ellipse cx="195" cy="165" rx="155" ry="130" fill="#dbeafe" opacity="0.65"/>
+  <ellipse cx="330" cy="260" rx="55" ry="45" fill="#bfdbfe" opacity="0.5"/>
+
+  <!-- Desk surface -->
+  <rect x="80" y="228" width="240" height="10" rx="5" fill="#93c5fd"/>
+
+  <!-- Monitor -->
+  <rect x="155" y="135" width="130" height="90" rx="8" fill="#1e3a8a"/>
+  <rect x="161" y="141" width="118" height="78" rx="5" fill="#1d4ed8"/>
+  <!-- Screen content — task board -->
+  <rect x="167" y="148" width="32" height="8" rx="3" fill="#fbbf24"/>
+  <rect x="167" y="159" width="32" height="6" rx="3" fill="#bfdbfe" opacity="0.7"/>
+  <rect x="167" y="168" width="32" height="6" rx="3" fill="#bfdbfe" opacity="0.5"/>
+  <rect x="167" y="177" width="32" height="6" rx="3" fill="#bfdbfe" opacity="0.7"/>
+  <rect x="167" y="186" width="32" height="6" rx="3" fill="#bfdbfe" opacity="0.5"/>
+  <!-- Column 2 -->
+  <rect x="205" y="148" width="32" height="8" rx="3" fill="#34d399"/>
+  <rect x="205" y="159" width="32" height="6" rx="3" fill="#bfdbfe" opacity="0.7"/>
+  <rect x="205" y="168" width="32" height="6" rx="3" fill="#bfdbfe" opacity="0.5"/>
+  <!-- Column 3 -->
+  <rect x="243" y="148" width="30" height="8" rx="3" fill="#60a5fa"/>
+  <rect x="243" y="159" width="30" height="6" rx="3" fill="#bfdbfe" opacity="0.7"/>
+  <!-- Monitor stand -->
+  <rect x="210" y="225" width="20" height="12" rx="3" fill="#1e3a8a"/>
+  <rect x="198" y="236" width="44" height="6" rx="3" fill="#172554"/>
+
+  <!-- Person 1 (employer, left) -->
+  <circle cx="130" cy="170" r="16" fill="#fbbf24"/>
+  <!-- hair -->
+  <path d="M 114 167 Q 117 153 130 151 Q 143 153 146 167 Q 141 160 130 159 Q 119 160 114 167 Z" fill="#1e293b"/>
+  <circle cx="125" cy="169" r="2" fill="#1e293b"/>
+  <circle cx="135" cy="169" r="2" fill="#1e293b"/>
+  <path d="M 124 175 Q 130 179 136 175" stroke="#1e293b" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <!-- body employer -->
+  <rect x="116" y="186" width="28" height="38" rx="8" fill="#2563eb"/>
+  <!-- pointing arm -->
+  <path d="M 144 196 Q 155 190 162 185" stroke="#2563eb" stroke-width="9" stroke-linecap="round"/>
+
+  <!-- Person 2 (worker, right) -->
+  <circle cx="300" cy="165" r="15" fill="#fed7aa"/>
+  <!-- hair short -->
+  <path d="M 285 162 Q 288 150 300 148 Q 312 150 315 162 Q 310 155 300 154 Q 290 155 285 162 Z" fill="#92400e"/>
+  <circle cx="296" cy="164" r="2" fill="#1e293b"/>
+  <circle cx="304" cy="164" r="2" fill="#1e293b"/>
+  <path d="M 295 170 Q 300 174 305 170" stroke="#1e293b" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <!-- body worker -->
+  <rect x="286" y="180" width="28" height="42" rx="8" fill="#3b82f6"/>
+  <!-- arm with clipboard -->
+  <path d="M 286 192 Q 272 195 265 200" stroke="#3b82f6" stroke-width="9" stroke-linecap="round"/>
+  <!-- Clipboard -->
+  <rect x="250" y="195" width="22" height="28" rx="3" fill="white" stroke="#93c5fd" stroke-width="1.5"/>
+  <rect x="256" y="192" width="10" height="6" rx="2" fill="#93c5fd"/>
+  <rect x="254" y="202" width="14" height="3" rx="1.5" fill="#dbeafe"/>
+  <rect x="254" y="208" width="14" height="3" rx="1.5" fill="#dbeafe"/>
+  <rect x="254" y="214" width="10" height="3" rx="1.5" fill="#dbeafe"/>
+
+  <!-- Chairs -->
+  <rect x="108" y="224" width="48" height="8" rx="4" fill="#60a5fa"/>
+  <rect x="120" y="232" width="6" height="20" rx="3" fill="#93c5fd"/>
+  <rect x="138" y="232" width="6" height="20" rx="3" fill="#93c5fd"/>
+  <rect x="108" y="185" width="6" height="45" rx="3" fill="#93c5fd"/>
+
+  <rect x="280" y="224" width="48" height="8" rx="4" fill="#60a5fa"/>
+  <rect x="292" y="232" width="6" height="20" rx="3" fill="#93c5fd"/>
+  <rect x="310" y="232" width="6" height="20" rx="3" fill="#93c5fd"/>
+  <rect x="322" y="185" width="6" height="45" rx="3" fill="#93c5fd"/>
+
+  <!-- Floating task card -->
+  <rect x="95" y="90" width="80" height="52" rx="8" fill="white" stroke="#bfdbfe" stroke-width="1.5" opacity="0.95"/>
+  <rect x="101" y="97" width="35" height="6" rx="3" fill="#dbeafe"/>
+  <rect x="101" y="106" width="60" height="4" rx="2" fill="#e0f2fe"/>
+  <rect x="101" y="113" width="50" height="4" rx="2" fill="#e0f2fe"/>
+  <rect x="101" y="120" width="40" height="8" rx="4" fill="#2563eb"/>
+  <text x="121" y="127" font-size="7" font-family="sans-serif" fill="white" text-anchor="middle" font-weight="600">Assign</text>
+
+  <!-- Notification / checkmark bubble -->
+  <circle cx="320" cy="115" r="22" fill="#dbeafe" opacity="0.8"/>
+  <circle cx="320" cy="115" r="16" fill="#2563eb"/>
+  <polyline points="312,115 318,121 328,109" stroke="white" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Gear icons floating -->
+  <circle cx="82" cy="145" r="10" fill="none" stroke="#93c5fd" stroke-width="2.5" opacity="0.7"/>
+  <circle cx="82" cy="145" r="4" fill="none" stroke="#93c5fd" stroke-width="2" opacity="0.7"/>
+  <circle cx="355" cy="180" r="8" fill="none" stroke="#bfdbfe" stroke-width="2" opacity="0.6"/>
+  <circle cx="355" cy="180" r="3" fill="none" stroke="#bfdbfe" stroke-width="1.5" opacity="0.6"/>
+</svg>

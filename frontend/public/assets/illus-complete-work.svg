@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 320" fill="none">
+  <!-- Background blobs -->
+  <ellipse cx="200" cy="170" rx="150" ry="125" fill="#dbeafe" opacity="0.65"/>
+  <ellipse cx="80" cy="270" rx="60" ry="45" fill="#bfdbfe" opacity="0.45"/>
+
+  <!-- Upload illustration: file with arrow -->
+  <!-- Document -->
+  <rect x="140" y="115" width="120" height="148" rx="10" fill="white" stroke="#bfdbfe" stroke-width="2"/>
+  <path d="M 220 115 L 260 115 L 260 148 L 220 148 Z" fill="#dbeafe"/>
+  <path d="M 220 115 L 220 148 L 260 148" fill="none" stroke="#bfdbfe" stroke-width="1.5"/>
+  <!-- Dog-eared corner effect -->
+  <path d="M 220 115 L 260 155 L 220 155 Z" fill="#bfdbfe" opacity="0.4"/>
+
+  <!-- Document lines (content) -->
+  <rect x="154" y="165" width="90" height="6" rx="3" fill="#dbeafe"/>
+  <rect x="154" y="175" width="75" height="5" rx="2.5" fill="#e0f2fe"/>
+  <rect x="154" y="184" width="82" height="5" rx="2.5" fill="#dbeafe"/>
+  <rect x="154" y="193" width="60" height="5" rx="2.5" fill="#e0f2fe"/>
+  <rect x="154" y="202" width="70" height="5" rx="2.5" fill="#dbeafe"/>
+
+  <!-- Image placeholder on document -->
+  <rect x="154" y="127" width="55" height="32" rx="5" fill="#dbeafe"/>
+  <circle cx="162" cy="135" r="5" fill="#93c5fd"/>
+  <path d="M 154 155 L 165 143 L 175 152 L 182 145 L 209 155 Z" fill="#93c5fd" opacity="0.5"/>
+
+  <!-- Upload arrow -->
+  <circle cx="200" cy="82" r="28" fill="#2563eb" opacity="0.12"/>
+  <circle cx="200" cy="82" r="20" fill="#2563eb"/>
+  <!-- Arrow up -->
+  <line x1="200" y1="94" x2="200" y2="72" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  <polyline points="192,80 200,72 208,80" stroke="white" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Person reviewing (employer) right side -->
+  <circle cx="315" cy="175" r="16" fill="#fbbf24"/>
+  <!-- hair -->
+  <path d="M 299 172 Q 302 158 315 156 Q 328 158 331 172 Q 326 165 315 164 Q 304 165 299 172 Z" fill="#1e293b"/>
+  <circle cx="310" cy="174" r="2" fill="#1e293b"/>
+  <circle cx="320" cy="174" r="2" fill="#1e293b"/>
+  <path d="M 309 180 Q 315 184 321 180" stroke="#1e293b" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <!-- body -->
+  <rect x="301" y="191" width="28" height="38" rx="8" fill="#1d4ed8"/>
+  <!-- arm pointing -->
+  <path d="M 301 200 Q 288 210 278 215" stroke="#1d4ed8" stroke-width="9" stroke-linecap="round"/>
+
+  <!-- Magnifying glass over document (reviewing) -->
+  <circle cx="278" cy="225" r="16" fill="none" stroke="#1d4ed8" stroke-width="4" opacity="0.7"/>
+  <line x1="289" y1="236" x2="299" y2="246" stroke="#1d4ed8" stroke-width="5" stroke-linecap="round" opacity="0.7"/>
+  <polyline points="272,224 277,229 285,220" stroke="#2563eb" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Worker (left) uploading -->
+  <circle cx="90" cy="178" r="15" fill="#fed7aa"/>
+  <!-- hair -->
+  <path d="M 75 175 Q 78 162 90 160 Q 102 162 105 175 Q 100 168 90 167 Q 80 168 75 175 Z" fill="#78350f"/>
+  <circle cx="86" cy="177" r="2" fill="#1e293b"/>
+  <circle cx="94" cy="177" r="2" fill="#1e293b"/>
+  <path d="M 85 183 Q 90 187 95 183" stroke="#1e293b" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+  <!-- body worker -->
+  <rect x="76" y="193" width="28" height="38" rx="8" fill="#3b82f6"/>
+  <!-- laptop -->
+  <rect x="104" y="215" width="55" height="35" rx="5" fill="#1e3a8a"/>
+  <rect x="108" y="219" width="47" height="27" rx="3" fill="#1d4ed8"/>
+  <rect x="100" y="250" width="63" height="6" rx="3" fill="#172554"/>
+  <!-- Arm to laptop -->
+  <path d="M 104 210 Q 110 215 115 220" stroke="#3b82f6" stroke-width="9" stroke-linecap="round"/>
+
+  <!-- Payment / money badge -->
+  <circle cx="340" cy="255" r="22" fill="#dbeafe" opacity="0.8"/>
+  <circle cx="340" cy="255" r="16" fill="#2563eb"/>
+  <text x="340" y="261" font-size="16" font-family="sans-serif" fill="white" text-anchor="middle" font-weight="700">$</text>
+
+  <!-- Big green check badge -->
+  <circle cx="330" cy="120" r="22" fill="#dcfce7"/>
+  <circle cx="330" cy="120" r="16" fill="#16a34a"/>
+  <polyline points="322,120 328,126 338,114" stroke="white" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Stars for rating -->
+  <text x="90" y="258" font-size="14" font-family="sans-serif" fill="#fbbf24">★★★★★</text>
+</svg>
