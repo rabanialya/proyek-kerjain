@@ -35,6 +35,12 @@ const OPSI_PAYMENT = [
   { value: 'e_wallet', label: 'E-Wallet' },
 ]
 
+// Pilihan bank populer
+const OPSI_BANK = ['BCA', 'Bank Mandiri', 'BRI', 'BNI', 'BTN']
+
+// Pilihan e-wallet populer
+const OPSI_EWALLET = ['Dana', 'OVO', 'GoPay', 'LinkAja', 'ShopeePay']
+
 // ── Komponen UI bersama ───────────────────────────────────────────────────────
 
 function MultiSelectToggle({ options, selected, onChange }) {
@@ -149,6 +155,135 @@ const inputCls =
 
 function SkeletonBlock({ className }) {
   return <div className={`animate-pulse rounded-xl bg-slate-200 ${className}`} />
+}
+
+// ── Komponen detail Transfer Bank ─────────────────────────────────────────────
+
+function BankDetailForm({ bankName, accountNumber, onChange }) {
+  const isCustom = bankName !== '' && !OPSI_BANK.includes(bankName)
+  const [showCustomInput, setShowCustomInput] = useState(isCustom)
+
+  function selectBank(name) {
+    if (name === '__custom__') {
+      setShowCustomInput(true)
+      onChange({ bankName: '', accountNumber })
+    } else {
+      setShowCustomInput(false)
+      onChange({ bankName: name, accountNumber })
+    }
+  }
+
+  return (
+    <div className="mt-3 space-y-3 rounded-xl border border-blue-100 bg-blue-50/50 p-4">
+      <p className="text-xs font-semibold text-blue-700">Detail Rekening Bank</p>
+      <div>
+        <label className="mb-1.5 block text-xs font-medium text-slate-600">
+          Nama Bank <span className="text-red-500">*</span>
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {OPSI_BANK.map((b) => (
+            <button key={b} type="button" onClick={() => selectBank(b)}
+              className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                bankName === b && !showCustomInput
+                  ? 'border-blue-600 bg-blue-600 text-white'
+                  : 'border-slate-300 bg-white text-slate-700 hover:border-blue-400 hover:bg-blue-50'
+              }`}>
+              {b}
+            </button>
+          ))}
+          <button type="button" onClick={() => selectBank('__custom__')}
+            className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+              showCustomInput
+                ? 'border-blue-600 bg-blue-600 text-white'
+                : 'border-slate-300 bg-white text-slate-700 hover:border-blue-400 hover:bg-blue-50'
+            }`}>
+            Lainnya
+          </button>
+        </div>
+        {showCustomInput && (
+          <input type="text" value={bankName}
+            onChange={(e) => onChange({ bankName: e.target.value, accountNumber })}
+            placeholder="Ketik nama bank kamu..."
+            className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
+        )}
+      </div>
+      <div>
+        <label className="mb-1.5 block text-xs font-medium text-slate-600">
+          Nomor Rekening <span className="text-red-500">*</span>
+        </label>
+        <input type="text" inputMode="numeric" value={accountNumber}
+          onChange={(e) => onChange({ bankName, accountNumber: e.target.value.replace(/\D/g, '') })}
+          placeholder="Contoh: 1234567890"
+          className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-4 focus:ring-blue-100" />
+      </div>
+    </div>
+  )
+}
+
+// ── Komponen detail E-Wallet ──────────────────────────────────────────────────
+
+function EwalletDetailForm({ provider, phoneNumber, onChange }) {
+  const isCustom = provider !== '' && !OPSI_EWALLET.includes(provider)
+  const [showCustomInput, setShowCustomInput] = useState(isCustom)
+
+  function selectProvider(name) {
+    if (name === '__custom__') {
+      setShowCustomInput(true)
+      onChange({ provider: '', phoneNumber })
+    } else {
+      setShowCustomInput(false)
+      onChange({ provider: name, phoneNumber })
+    }
+  }
+
+  return (
+    <div className="mt-3 space-y-3 rounded-xl border border-indigo-100 bg-indigo-50/50 p-4">
+      <p className="text-xs font-semibold text-indigo-700">Detail E-Wallet</p>
+      <div>
+        <label className="mb-1.5 block text-xs font-medium text-slate-600">
+          Provider E-Wallet <span className="text-red-500">*</span>
+        </label>
+        <div className="flex flex-wrap gap-2">
+          {OPSI_EWALLET.map((p) => (
+            <button key={p} type="button" onClick={() => selectProvider(p)}
+              className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+                provider === p && !showCustomInput
+                  ? 'border-indigo-600 bg-indigo-600 text-white'
+                  : 'border-slate-300 bg-white text-slate-700 hover:border-indigo-400 hover:bg-indigo-50'
+              }`}>
+              {p}
+            </button>
+          ))}
+          <button type="button" onClick={() => selectProvider('__custom__')}
+            className={`rounded-lg border px-3 py-1.5 text-sm font-medium transition ${
+              showCustomInput
+                ? 'border-indigo-600 bg-indigo-600 text-white'
+                : 'border-slate-300 bg-white text-slate-700 hover:border-indigo-400 hover:bg-indigo-50'
+            }`}>
+            Lainnya
+          </button>
+        </div>
+        {showCustomInput && (
+          <input type="text" value={provider}
+            onChange={(e) => onChange({ provider: e.target.value, phoneNumber })}
+            placeholder="Ketik nama e-wallet kamu..."
+            className="mt-2 w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100" />
+        )}
+      </div>
+      <div>
+        <label className="mb-1.5 block text-xs font-medium text-slate-600">
+          Nomor Telepon Terdaftar <span className="text-red-500">*</span>
+        </label>
+        <input type="tel" value={phoneNumber}
+          onChange={(e) => onChange({ provider, phoneNumber: e.target.value })}
+          placeholder="Contoh: 081234567890"
+          className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100" />
+        <p className="mt-1 text-xs text-slate-400">
+          Nomor telepon yang terdaftar di {provider || 'e-wallet'} kamu.
+        </p>
+      </div>
+    </div>
+  )
 }
 
 // ── Komponen upload avatar ────────────────────────────────────────────────────
@@ -376,6 +511,14 @@ export default function WorkerProfileEditPage() {
   const [bio, setBio] = useState('')
   const [paymentMethods, setPaymentMethods] = useState([])
 
+  // Detail Bank
+  const [bankName, setBankName] = useState('')
+  const [accountNumber, setAccountNumber] = useState('')
+
+  // Detail E-Wallet
+  const [ewalletProvider, setEwalletProvider] = useState('')
+  const [ewalletPhone, setEwalletPhone] = useState('')
+
   // UI state
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -413,6 +556,16 @@ export default function WorkerProfileEditPage() {
             .map((v) => v.toLowerCase())
             .filter((v) => validPaymentValues.includes(v))
         )
+        // Pre-fill detail bank
+        if (p.bank_details) {
+          setBankName(p.bank_details.bank_name ?? '')
+          setAccountNumber(p.bank_details.account_number ?? '')
+        }
+        // Pre-fill detail e-wallet
+        if (p.ewallet_details) {
+          setEwalletProvider(p.ewallet_details.provider ?? '')
+          setEwalletPhone(p.ewallet_details.phone_number ?? '')
+        }
         setAvatarPreviewUrl(avatarUrl)
         setHasCv(!!cvUrl)
         setHasIdDoc(!!idUrl)
@@ -421,11 +574,31 @@ export default function WorkerProfileEditPage() {
       .finally(() => setInitialLoading(false))
   }, [])
 
+  const hasBank = paymentMethods.includes('transfer_bank')
+  const hasEwallet = paymentMethods.includes('e_wallet')
+
+  function handlePaymentToggle(methods) {
+    setPaymentMethods(methods)
+    if (!methods.includes('transfer_bank')) { setBankName(''); setAccountNumber('') }
+    if (!methods.includes('e_wallet')) { setEwalletProvider(''); setEwalletPhone('') }
+  }
+
   // ── Submit (PUT partial update) ─────────────────────────────────────────
 
   async function handleSubmit(e) {
     e.preventDefault()
     setSaveError('')
+
+    // Validasi detail pembayaran
+    if (hasBank && (!bankName.trim() || !accountNumber.trim())) {
+      setSaveError('Nama bank dan nomor rekening wajib diisi untuk metode Transfer Bank.')
+      return
+    }
+    if (hasEwallet && (!ewalletProvider.trim() || !ewalletPhone.trim())) {
+      setSaveError('Provider dan nomor telepon e-wallet wajib diisi.')
+      return
+    }
+
     setSaving(true)
 
     try {
@@ -440,12 +613,16 @@ export default function WorkerProfileEditPage() {
         hari_tersedia: hariTersedia.length > 0 ? hariTersedia : null,
         tanggal_mulai: tanggalMulai || null,
         accepted_payment_methods: paymentMethods.length > 0 ? paymentMethods : null,
+        bank_details: hasBank
+          ? { bank_name: bankName.trim(), account_number: accountNumber.trim() }
+          : null,
+        ewallet_details: hasEwallet
+          ? { provider: ewalletProvider.trim(), phone_number: ewalletPhone.trim() }
+          : null,
       }
 
       await updateWorkerProfile(body)
       setSuccess(true)
-
-      // Navigasi ke halaman detail setelah 800ms agar flash success terlihat
       setTimeout(() => navigate('/worker/profile'), 800)
     } catch (err) {
       setSaveError(err.message || 'Gagal menyimpan. Silakan coba lagi.')
@@ -695,11 +872,44 @@ export default function WorkerProfileEditPage() {
 
           {/* ── E. Metode pembayaran ── */}
           <Section title="E. Metode Pembayaran yang Diterima">
-            <MultiSelectToggle
-              options={OPSI_PAYMENT}
-              selected={paymentMethods}
-              onChange={setPaymentMethods}
-            />
+            <Field hint="Pilih minimal satu. Admin akan mentransfer upah sesuai detail di bawah.">
+              <MultiSelectToggle
+                options={OPSI_PAYMENT}
+                selected={paymentMethods}
+                onChange={handlePaymentToggle}
+              />
+            </Field>
+
+            {/* Detail Transfer Bank */}
+            {hasBank && (
+              <BankDetailForm
+                bankName={bankName}
+                accountNumber={accountNumber}
+                onChange={({ bankName: bn, accountNumber: an }) => {
+                  setBankName(bn)
+                  setAccountNumber(an)
+                }}
+              />
+            )}
+
+            {/* Detail E-Wallet */}
+            {hasEwallet && (
+              <EwalletDetailForm
+                provider={ewalletProvider}
+                phoneNumber={ewalletPhone}
+                onChange={({ provider: p, phoneNumber: ph }) => {
+                  setEwalletProvider(p)
+                  setEwalletPhone(ph)
+                }}
+              />
+            )}
+
+            {/* Info cash */}
+            {paymentMethods.includes('cash') && !hasBank && !hasEwallet && (
+              <p className="mt-2 text-xs text-slate-400">
+                💡 Pembayaran cash dilakukan langsung — tidak perlu detail rekening.
+              </p>
+            )}
           </Section>
 
           {/* Error */}

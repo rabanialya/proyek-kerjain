@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { fetchPublicWorkerProfile } from '../lib/api'
+import { Flag, Star } from 'lucide-react'
+import ReportModal from '../components/ReportModal'
 
 // ── Label map untuk nilai enum ────────────────────────────────────────────────
 
@@ -70,6 +72,7 @@ export default function PublicWorkerProfilePage() {
   const [profile, setProfile] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [reportOpen, setReportOpen] = useState(false)
 
   useEffect(() => {
     if (!profileId) {
@@ -122,6 +125,7 @@ export default function PublicWorkerProfilePage() {
     profile?.tanggal_mulai
 
   return (
+    <>
     <main className="min-h-screen bg-slate-100 px-4 py-8">
       <div className="mx-auto max-w-2xl space-y-4">
 
@@ -172,9 +176,12 @@ export default function PublicWorkerProfilePage() {
 
               {/* Rating — hanya tampil jika ada data nyata */}
               {profile?.rating_avg > 0 && (
-                <p className="mt-2 text-sm font-medium text-slate-700">
-                  ⭐ {profile.rating_avg.toFixed(1)}
-                </p>
+                <div className="mt-2 flex items-center gap-1.5">
+                  <Star size={14} className="fill-amber-400 text-amber-400" />
+                  <span className="text-sm font-medium text-slate-700">
+                    {profile.rating_avg.toFixed(1)}
+                  </span>
+                </div>
               )}
             </div>
           </div>
@@ -184,6 +191,19 @@ export default function PublicWorkerProfilePage() {
             <p className="mt-4 border-t border-slate-100 pt-4 text-sm text-slate-600 leading-relaxed">
               {profile.bio}
             </p>
+          )}
+
+          {/* Tombol laporkan — ditampilkan di bawah header, tidak mendominasi */}
+          {profile?.user_id && (
+            <div className="mt-4 border-t border-slate-100 pt-4 flex justify-end">
+              <button
+                onClick={() => setReportOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-red-100 px-3 py-1.5 text-xs font-semibold text-red-500 hover:bg-red-50 transition"
+              >
+                <Flag size={12} />
+                Laporkan Pengguna
+              </button>
+            </div>
           )}
         </div>
 
@@ -248,5 +268,17 @@ export default function PublicWorkerProfilePage() {
 
       </div>
     </main>
+
+    {/* Modal laporan */}
+    {profile?.user_id && (
+      <ReportModal
+        isOpen={reportOpen}
+        onClose={() => setReportOpen(false)}
+        reportType="user"
+        targetId={profile.user_id}
+        targetName={profile.full_name}
+      />
+    )}
+  </>
   )
 }

@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { apiRequestAuth, uploadAvatar } from '../lib/api'
+import { setLastRole } from '../lib/lastRole'
 
 /**
  * Form pembuatan profil Employer.
@@ -265,6 +266,7 @@ export default function EmployerProfileForm() {
       })
 
       await refreshProfileStatus()
+      setLastRole(user.id, 'employer')
       navigate('/employer')
     } catch (err) {
       setError(err.message || 'Gagal membuat profil. Silakan coba lagi.')
