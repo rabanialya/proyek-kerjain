@@ -1,97 +1,166 @@
 import { useNavigate } from 'react-router-dom'
+import { AlertTriangle, ChevronRight, TrendingUp } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useDashboardWorker } from '../hooks/useDashboardWorker'
-import { AlertTriangle, MapPin, Briefcase, ClipboardList } from 'lucide-react'
-import NotificationBell from '../components/NotificationBell'
+import { setLastRole } from '../lib/lastRole'
 
-// ─── Komponen kecil ────────────────────────────────────────────────────────
+import WorkerProfileHeader from '../components/worker/WorkerProfileHeader'
+import WorkerStatCards from '../components/worker/WorkerStatCards'
+import WorkerActiveJobs from '../components/worker/WorkerActiveJobs'
+import WorkerApplicationList from '../components/worker/WorkerApplicationList'
+import WorkerJobRecommendations from '../components/worker/WorkerJobRecommendations'
 
-function StatCard({ label, value, accent }) {
-  const accents = {
-    slate: 'bg-slate-50 text-slate-700',
-    yellow: 'bg-yellow-50 text-yellow-700',
-    green: 'bg-green-50 text-green-700',
-    red: 'bg-red-50 text-red-700',
-  }
+// ─── Sapaan berdasarkan waktu ──────────────────────────────────────────────
+
+function getGreeting() {
+  const hour = new Date().getHours()
+  if (hour < 11) return 'Selamat pagi'
+  if (hour < 15) return 'Selamat siang'
+  if (hour < 18) return 'Selamat sore'
+  return 'Selamat malam'
+}
+
+// ─── Progress kelengkapan profil ──────────────────────────────────────────
+
+function calcProfileCompletion(profile) {
+  if (!profile) return { pct: 0, missing: [] }
+  const checks = [
+    { key: 'nickname', label: 'Nama panggilan' },
+    { key: 'bio', label: 'Bio' },
+    { key: 'location', label: 'Lokasi' },
+    { key: 'status_pekerjaan', label: 'Status pekerjaan' },
+    { key: 'komitmen_jam', label: 'Komitmen jam' },
+  ]
+  const hasSkills = profile.skills?.length > 0
+  const hasPayment = profile.accepted_payment_methods?.length > 0
+
+  const filled =
+    checks.filter((c) => !!profile[c.key]).length +
+    (hasSkills ? 1 : 0) +
+    (hasPayment ? 1 : 0)
+  const total = checks.length + 2
+  const missing = [
+    ...checks.filter((c) => !profile[c.key]).map((c) => c.label),
+    ...(!hasSkills ? ['Keahlian (skills)'] : []),
+    ...(!hasPayment ? ['Metode pembayaran'] : []),
+  ]
+  return { pct: Math.round((filled / total) * 100), missing }
+}
+
+// ─── Skeleton loading ─────────────────────────────────────────────────────
+
+function SkeletonBlock({ className }) {
+  return <div className={`animate-pulse rounded-2xl bg-slate-200 ${className}`} />
+}
+
+function DashboardSkeleton() {
   return (
-    <div className={`rounded-2xl px-5 py-4 ${accents[accent] ?? accents.slate}`}>
-      <p className="text-2xl font-bold">{value}</p>
-      <p className="mt-0.5 text-xs font-medium">{label}</p>
-    </div>
+    <main className="min-h-screen bg-slate-50 px-4 py-8">
+      <div className="mx-auto w-full max-w-5xl space-y-5">
+        <SkeletonBlock className="h-48" />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <SkeletonBlock key={i} className="h-28" />
+          ))}
+        </div>
+        <SkeletonBlock className="h-16" />
+        <SkeletonBlock className="h-36" />
+        <SkeletonBlock className="h-56" />
+      </div>
+    </main>
   )
 }
 
+// ─── Error state ──────────────────────────────────────────────────────────
+
+function DashboardError({ message, onRetry }) {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-lg ring-1 ring-slate-100">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-50">
+          <AlertTriangle size={32} className="text-amber-400" />
+        </div>
+        <h2 className="mt-4 font-bold text-slate-900">Gagal memuat dashboard</h2>
+        <p className="mt-2 text-sm text-slate-500">{message}</p>
+        <button
+          onClick={onRetry}
+          className="mt-6 w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 active:scale-95"
+        >
+          Coba lagi
+        </button>
+      </div>
+    </main>
+  )
+}
+
+// ─── Section header ───────────────────────────────────────────────────────
+
 function SectionHeader({ title, action }) {
   return (
-    <div className="mb-3 flex items-center justify-between">
-      <h2 className="text-base font-semibold text-slate-800">{title}</h2>
+    <div className="mb-4 flex items-center justify-between gap-2">
+      <h2 className="text-base font-bold text-slate-800">{title}</h2>
       {action}
     </div>
   )
 }
 
-function TaskCard({ task, onClick }) {
+// ─── Profile completion bar ───────────────────────────────────────────────
+
+function ProfileCompletion({ profile, onEdit }) {
+  const { pct, missing } = calcProfileCompletion(profile)
+  if (pct === 100) return null
+
+  const barColor =
+    pct < 40 ? 'bg-red-400' : pct < 70 ? 'bg-amber-400' : 'bg-emerald-500'
+  const pctColor =
+    pct < 40 ? 'text-red-500' : pct < 70 ? 'text-amber-500' : 'text-emerald-600'
+
   return (
-    <button
-      onClick={onClick}
-      className="w-full rounded-xl border border-slate-200 bg-white p-4 text-left transition hover:border-blue-300 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <p className="font-medium text-slate-900 leading-snug">{task.title}</p>
-        <span className="shrink-0 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-600">
-          Published
-        </span>
+    <section className="rounded-2xl bg-white p-5 ring-1 ring-slate-100">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h2 className="text-sm font-bold text-slate-800">Kelengkapan profil</h2>
+          <p className="mt-0.5 text-xs text-slate-500">
+            Profil lengkap meningkatkan peluang diterima employer.
+          </p>
+        </div>
+        <span className={`shrink-0 text-lg font-extrabold ${pctColor}`}>{pct}%</span>
       </div>
-      <p className="mt-1 text-xs text-slate-500">{task.location}</p>
-      <p className="mt-2 text-sm font-semibold text-slate-800">
-        Rp {Number(task.wage_amount).toLocaleString('id-ID')}
-        <span className="ml-1 text-xs font-normal text-slate-400">
-          · {task.payment_method}
-        </span>
-      </p>
-    </button>
-  )
-}
 
-function ApplicationRow({ app }) {
-  const statusStyle = {
-    pending: 'bg-yellow-50 text-yellow-700',
-    accepted: 'bg-green-50 text-green-700',
-    rejected: 'bg-red-50 text-red-700',
-  }
-  const statusLabel = {
-    pending: 'Menunggu',
-    accepted: 'Diterima',
-    rejected: 'Ditolak',
-  }
-  const style = statusStyle[app.status] ?? 'bg-slate-50 text-slate-600'
-  const label = statusLabel[app.status] ?? app.status
-
-  return (
-    <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3">
-      <div>
-        <p className="text-xs text-slate-400">Task ID</p>
-        <p className="text-sm font-medium text-slate-700 font-mono">
-          {String(app.task_id).slice(0, 8)}…
-        </p>
+      {/* Bar */}
+      <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+          style={{ width: `${pct}%` }}
+        />
       </div>
-      <span className={`rounded-full px-3 py-1 text-xs font-semibold ${style}`}>
-        {label}
-      </span>
-    </div>
+
+      {/* Missing items + tombol lengkapi */}
+      {missing.length > 0 && (
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-slate-400">
+            Belum diisi:{' '}
+            <span className="text-slate-600">
+              {missing.slice(0, 2).join(', ')}
+              {missing.length > 2 ? `, +${missing.length - 2} lainnya` : ''}
+            </span>
+          </p>
+          <button
+            onClick={onEdit}
+            className="shrink-0 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-700"
+          >
+            Lengkapi
+          </button>
+        </div>
+      )}
+    </section>
   )
 }
 
-function SkeletonBlock({ className }) {
-  return (
-    <div className={`animate-pulse rounded-xl bg-slate-200 ${className}`} />
-  )
-}
-
-// ─── Dashboard utama ───────────────────────────────────────────────────────
+// ─── Dashboard utama ──────────────────────────────────────────────────────
 
 export default function WorkerDashboard() {
-  const { user, logout } = useAuth()
+  const { user, profileStatus, logout } = useAuth()
   const navigate = useNavigate()
 
   const {
@@ -99,264 +168,146 @@ export default function WorkerDashboard() {
     applicationSummary,
     applications,
     recentTasks,
+    activeJobs,
     activeJobsCount,
     loading,
     error,
     reload,
   } = useDashboardWorker()
 
-  // ── Loading state ──
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-slate-100 px-4 py-8">
-        <div className="mx-auto max-w-2xl space-y-4">
-          <SkeletonBlock className="h-24" />
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {[...Array(4)].map((_, i) => (
-              <SkeletonBlock key={i} className="h-20" />
-            ))}
-          </div>
-          <SkeletonBlock className="h-20" />
-          <SkeletonBlock className="h-40" />
-          <SkeletonBlock className="h-56" />
-        </div>
-      </main>
-    )
+  // ── Perpindahan role ──
+  function handleSwitchToEmployer() {
+    if (profileStatus?.has_employer_profile) {
+      setLastRole(user.id, 'employer')
+      navigate('/employer')
+    } else {
+      navigate('/employer/setup')
+    }
   }
 
-  // ── Error state ──
-  if (error) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-        <div className="w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-lg">
-          <AlertTriangle size={36} className="mx-auto text-amber-400" />
-          <h2 className="mt-3 font-semibold text-slate-900">
-            Gagal memuat dashboard
-          </h2>
-          <p className="mt-2 text-sm text-slate-500">{error}</p>
-          <button
-            onClick={reload}
-            className="mt-5 w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white hover:bg-blue-700"
-          >
-            Coba lagi
-          </button>
-        </div>
-      </main>
-    )
-  }
+  if (loading) return <DashboardSkeleton />
+  if (error) return <DashboardError message={error} onRetry={reload} />
+
+  const greeting = getGreeting()
 
   return (
-    <main className="min-h-screen bg-slate-100 px-4 py-8">
-      <div className="mx-auto max-w-2xl space-y-6">
+    <main className="min-h-screen bg-slate-50 px-4 py-8">
+      {/* Wrapper max-width — proporsional di desktop, full-width di mobile */}
+      <div className="mx-auto w-full max-w-5xl space-y-5">
 
-        {/* ── Kartu profil Worker ── */}
-        <section className="rounded-2xl bg-white p-6 shadow-sm">
-          <div className="flex items-start gap-4">
-            {/* Avatar inisial */}
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-xl font-bold text-white select-none">
-              {(workerProfile?.nickname ?? user?.full_name ?? '?')[0].toUpperCase()}
-            </div>
+        {/* ── 1. Header profil ── */}
+        <WorkerProfileHeader
+          workerProfile={workerProfile}
+          user={user}
+          greeting={greeting}
+          onViewProfile={() => navigate('/worker/profile')}
+          onEditProfile={() => navigate('/worker/profile/edit')}
+          onSwitchRole={handleSwitchToEmployer}
+        />
 
-            <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-semibold uppercase tracking-widest text-blue-600">
-                      Worker
-                    </span>
-                    {workerProfile?.status_pekerjaan && (
-                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700">
-                        {workerProfile.status_pekerjaan}
-                      </span>
-                    )}
-                  </div>
-                  <h1 className="mt-0.5 text-lg font-bold text-slate-900 leading-tight">
-                    {workerProfile?.nickname
-                      ? `${workerProfile.nickname} · ${user?.full_name}`
-                      : user?.full_name}
-                  </h1>
-                  {workerProfile?.location && (
-                    <p className="mt-0.5 text-xs text-slate-500 flex items-center gap-1">
-                      <MapPin size={11} className="shrink-0" /> {workerProfile.location}
-                    </p>
-                  )}
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <NotificationBell />
-                  <button
-                    onClick={() => navigate('/dashboard')}
-                    className="shrink-0 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                  >
-                    Ganti peran
-                  </button>
-                </div>
-              </div>
+        {/* ── 2. Kelengkapan profil ── */}
+        <ProfileCompletion
+          profile={workerProfile}
+          onEdit={() => navigate('/worker/profile/edit')}
+        />
 
-              {/* Bio */}
-              {workerProfile?.bio ? (
-                <p className="mt-2 text-sm text-slate-500 line-clamp-2">
-                  {workerProfile.bio}
-                </p>
-              ) : (
-                <p className="mt-2 text-sm text-slate-400 italic">
-                  Belum ada bio — lengkapi profilmu.
-                </p>
-              )}
-
-              {/* Skills pills */}
-              {workerProfile?.skills?.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {workerProfile.skills.slice(0, 4).map((s) => (
-                    <span
-                      key={s}
-                      className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-600"
-                    >
-                      {s}
-                    </span>
-                  ))}
-                  {workerProfile.skills.length > 4 && (
-                    <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs text-slate-400">
-                      +{workerProfile.skills.length - 4}
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {/* Aksi profil */}
-              <div className="mt-3 flex gap-2">
-                <button
-                  onClick={() => navigate('/worker/profile')}
-                  className="rounded-lg bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 transition hover:bg-blue-100"
-                >
-                  Lihat Profil
-                </button>
-                <button
-                  onClick={() => navigate('/worker/profile/edit')}
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
-                >
-                  Edit Profil
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ── Ringkasan lamaran ── */}
+        {/* ── 3. Ringkasan lamaran ── */}
         <section>
           <SectionHeader
-            title="Ringkasan lamaranmu"
+            title="Ringkasan Lamaran"
             action={
               applicationSummary.total > 0 && (
-                <span className="text-xs text-slate-400">
+                <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-600 ring-1 ring-blue-100">
                   {applicationSummary.total} total
                 </span>
               )
             }
           />
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard label="Total" value={applicationSummary.total} accent="slate" />
-            <StatCard label="Menunggu" value={applicationSummary.pending} accent="yellow" />
-            <StatCard label="Diterima" value={applicationSummary.accepted} accent="green" />
-            <StatCard label="Ditolak" value={applicationSummary.rejected} accent="red" />
+          <WorkerStatCards summary={applicationSummary} />
+        </section>
+
+        {/* ── Layout dua kolom: kiri (pekerjaan aktif + lamaran), kanan (rekomendasi) ── */}
+        {/* Desktop: 2 kolom. Tablet ke bawah: 1 kolom stacked. */}
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
+
+          {/* Kolom kiri (lg: 2/5 lebar) */}
+          <div className="space-y-5 lg:col-span-2">
+
+            {/* ── 4. Pekerjaan aktif ── */}
+            <section>
+              <SectionHeader
+                title="Pekerjaan Aktif"
+                action={
+                  activeJobsCount > 0 && (
+                    <button
+                      onClick={() => navigate('/worker/jobs')}
+                      className="flex items-center gap-1 text-xs font-semibold text-blue-600 transition hover:text-blue-800"
+                    >
+                      Lihat semua <ChevronRight size={13} />
+                    </button>
+                  )
+                }
+              />
+              <WorkerActiveJobs
+                activeJobs={activeJobs}
+                activeJobsCount={activeJobsCount}
+                onViewAll={() => navigate('/worker/jobs')}
+                onFindJobs={() => navigate('/tasks')}
+                onJobClick={() => navigate('/worker/jobs')}
+              />
+            </section>
+
+            {/* ── 5. Lamaran terbaru ── */}
+            <section>
+              <SectionHeader
+                title="Lamaran Terbaru"
+                action={
+                  applications.length > 5 && (
+                    <span className="text-xs text-slate-400">
+                      +{applications.length - 5} lainnya
+                    </span>
+                  )
+                }
+              />
+              <WorkerApplicationList
+                applications={applications}
+                onViewAll={applications.length > 5 ? () => navigate('/worker/applications') : undefined}
+              />
+            </section>
+
           </div>
-        </section>
 
-        {/* ── Pekerjaan Saya ── */}
-        <section>
-          <SectionHeader title="Pekerjaan Saya" />
-          <button
-            onClick={() => navigate('/worker/jobs')}
-            className="w-full rounded-2xl border border-slate-200 bg-white p-5 text-left transition hover:border-blue-300 hover:shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-          >
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50">
-                  <Briefcase size={20} className="text-blue-600" />
-                </div>
-                <div>
-                  <p className="font-semibold text-slate-900">
-                    Pekerjaan yang Diterima
-                  </p>
-                  <p className="mt-0.5 text-xs text-slate-500">
-                    {activeJobsCount > 0
-                      ? `${activeJobsCount} pekerjaan sedang aktif`
-                      : 'Belum ada pekerjaan aktif'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {activeJobsCount > 0 && (
-                  <span className="rounded-full bg-blue-600 px-2.5 py-0.5 text-xs font-bold text-white">
-                    {activeJobsCount}
-                  </span>
-                )}
-                <span className="text-sm text-blue-600 font-medium">
-                  Lihat →
-                </span>
-              </div>
-            </div>
-          </button>
-        </section>
+          {/* Kolom kanan (lg: 3/5 lebar) — Rekomendasi pekerjaan */}
+          <div className="lg:col-span-3">
+            <section>
+              <SectionHeader
+                title="Rekomendasi Pekerjaan"
+                action={
+                  <button
+                    onClick={() => navigate('/tasks')}
+                    className="flex items-center gap-1 text-xs font-semibold text-blue-600 transition hover:text-blue-800"
+                  >
+                    <TrendingUp size={13} />
+                    Lihat semua
+                  </button>
+                }
+              />
+              <WorkerJobRecommendations
+                tasks={recentTasks}
+                onViewAll={() => navigate('/tasks')}
+                onTaskClick={(task) => navigate(`/tasks/${task.id}`)}
+              />
+            </section>
+          </div>
 
-        {/* ── Daftar lamaran terbaru ── */}
-        {applications.length > 0 && (
-          <section>
-            <SectionHeader title="Lamaran terbaru" />
-            <div className="space-y-2">
-              {applications.slice(0, 5).map((app) => (
-                <ApplicationRow key={app.id} app={app} />
-              ))}
-              {applications.length > 5 && (
-                <p className="pt-1 text-center text-xs text-slate-400">
-                  +{applications.length - 5} lamaran lainnya
-                </p>
-              )}
-            </div>
-          </section>
-        )}
-
-        {/* ── Tugas tersedia ── */}
-        <section>
-          <SectionHeader
-            title="Tugas tersedia"
-            action={
-              <button
-                onClick={() => navigate('/tasks')}
-                className="text-xs font-medium text-blue-600 hover:text-blue-800"
-              >
-                Lihat semua →
-              </button>
-            }
-          />
-          {recentTasks.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 py-10 text-center">
-              <ClipboardList size={28} className="mx-auto text-slate-300" />
-              <p className="mt-2 text-sm font-medium text-slate-600">
-                Belum ada tugas yang tersedia
-              </p>
-              <p className="mt-1 text-xs text-slate-400">
-                Cek kembali nanti.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {recentTasks.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  onClick={() => navigate(`/tasks/${task.id}`)}
-                />
-              ))}
-            </div>
-          )}
-        </section>
+        </div>
 
         {/* ── Footer ── */}
-        <div className="flex items-center justify-between pb-6 text-xs text-slate-400">
-          <span>{user?.email}</span>
+        <div className="flex items-center justify-between border-t border-slate-200 pb-6 pt-4 text-xs text-slate-400">
+          <span>Kerjain · Worker Dashboard</span>
           <button
             onClick={logout}
-            className="hover:text-slate-600 hover:underline underline-offset-2"
+            className="transition hover:text-slate-600 hover:underline underline-offset-2"
           >
             Keluar
           </button>

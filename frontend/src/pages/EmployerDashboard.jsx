@@ -3,136 +3,131 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useDashboardEmployer } from '../hooks/useDashboardEmployer'
 import { publishTask } from '../lib/api'
-import {
-  AlertTriangle, CheckCircle2, X, MapPin, Pencil, Rocket,
-  Plus, LayoutList, Search, FileText, BadgeCheck,
-} from 'lucide-react'
-import NotificationBell from '../components/NotificationBell'
+import { setLastRole } from '../lib/lastRole'
+import { AlertTriangle, CheckCircle2, X, ChevronRight, TrendingUp } from 'lucide-react'
 
-// ─── Komponen kecil ────────────────────────────────────────────────────────
+import EmployerProfileHeader from '../components/employer/EmployerProfileHeader'
+import EmployerStatCards from '../components/employer/EmployerStatCards'
+import EmployerQuickActions from '../components/employer/EmployerQuickActions'
+import EmployerActiveJobs from '../components/employer/EmployerActiveJobs'
+import EmployerTaskList from '../components/employer/EmployerTaskList'
 
-function StatCard({ label, value, accent }) {
-  const accents = {
-    slate: 'bg-slate-50 text-slate-700',
-    blue: 'bg-blue-50 text-blue-700',
-    emerald: 'bg-emerald-50 text-emerald-700',
-    red: 'bg-red-50 text-red-700',
-  }
+// ─── Sapaan berdasarkan waktu ──────────────────────────────────────────────
+
+function getGreeting() {
+  const hour = new Date().getHours()
+  if (hour < 11) return 'Selamat pagi'
+  if (hour < 15) return 'Selamat siang'
+  if (hour < 18) return 'Selamat sore'
+  return 'Selamat malam'
+}
+
+// ─── Skeleton loading ─────────────────────────────────────────────────────
+
+function SkeletonBlock({ className }) {
+  return <div className={`animate-pulse rounded-2xl bg-slate-200 ${className}`} />
+}
+
+function DashboardSkeleton() {
   return (
-    <div className={`rounded-2xl px-5 py-4 ${accents[accent] ?? accents.slate}`}>
-      <p className="text-2xl font-bold">{value}</p>
-      <p className="mt-0.5 text-xs font-medium">{label}</p>
-    </div>
+    <main className="min-h-screen bg-slate-50 px-4 py-8">
+      <div className="mx-auto w-full max-w-5xl space-y-5">
+        <SkeletonBlock className="h-48" />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <SkeletonBlock key={i} className="h-28" />
+          ))}
+        </div>
+        <SkeletonBlock className="h-16" />
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
+          <div className="space-y-5 lg:col-span-2">
+            <SkeletonBlock className="h-64" />
+          </div>
+          <div className="lg:col-span-3">
+            <SkeletonBlock className="h-96" />
+          </div>
+        </div>
+      </div>
+    </main>
   )
 }
 
+// ─── Error state ──────────────────────────────────────────────────────────
+
+function DashboardError({ message, onRetry }) {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4">
+      <div className="w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-lg ring-1 ring-slate-100">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-50">
+          <AlertTriangle size={32} className="text-amber-400" />
+        </div>
+        <h2 className="mt-4 font-bold text-slate-900">Gagal memuat dashboard</h2>
+        <p className="mt-2 text-sm text-slate-500">{message}</p>
+        <button
+          onClick={onRetry}
+          className="mt-6 w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition hover:bg-blue-700 active:scale-95"
+        >
+          Coba lagi
+        </button>
+      </div>
+    </main>
+  )
+}
+
+// ─── Section header ───────────────────────────────────────────────────────
+
 function SectionHeader({ title, action }) {
   return (
-    <div className="mb-3 flex items-center justify-between">
-      <h2 className="text-base font-semibold text-slate-800">{title}</h2>
+    <div className="mb-4 flex items-center justify-between gap-2">
+      <h2 className="text-base font-bold text-slate-800">{title}</h2>
       {action}
     </div>
   )
 }
 
-function StatusBadge({ status }) {
-  const map = {
-    draft: { cls: 'bg-slate-100 text-slate-600', label: 'Draft' },
-    published: { cls: 'bg-emerald-50 text-emerald-700', label: 'Published' },
-    closed: { cls: 'bg-red-50 text-red-600', label: 'Ditutup' },
-  }
-  const { cls, label } = map[status] ?? { cls: 'bg-slate-100 text-slate-500', label: status }
-  return (
-    <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${cls}`}>
-      {label}
-    </span>
-  )
-}
-
-function TaskRow({ task, onEdit, onPublish, publishing }) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 transition hover:border-emerald-300 hover:shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <p className="font-medium text-slate-900 leading-snug">{task.title}</p>
-        <StatusBadge status={task.status} />
-      </div>
-      <p className="mt-1 text-xs text-slate-500">{task.location}</p>
-      <div className="mt-2 flex items-center gap-3">
-        <p className="text-sm font-semibold text-slate-800">
-          Rp {Number(task.wage_amount).toLocaleString('id-ID')}
-        </p>
-        <span className="text-xs text-slate-400">
-          {task.worker_needed} worker dibutuhkan
-        </span>
-        <span className="text-xs text-slate-400">· {task.payment_method}</span>
-      </div>
-
-      {/* Aksi per task — hanya untuk draft dan published */}
-      {task.status !== 'closed' && (
-        <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
-          <button
-            onClick={() => onEdit(task.id)}
-            className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-200 flex items-center gap-1"
-          >
-            <Pencil size={11} /> Edit
-          </button>
-          {task.status === 'draft' && (
-            <button
-              onClick={() => onPublish(task)}
-              disabled={publishing === task.id}
-              className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 flex items-center gap-1"
-            >
-              {publishing === task.id ? 'Memproses…' : <><Rocket size={11} /> Publikasikan</>}
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function SkeletonBlock({ className }) {
-  return (
-    <div className={`animate-pulse rounded-xl bg-slate-200 ${className}`} />
-  )
-}
-
-// ─── Dashboard utama ───────────────────────────────────────────────────────
+// ─── Dashboard utama ──────────────────────────────────────────────────────
 
 export default function EmployerDashboard() {
-  const { user, logout } = useAuth()
+  const { user, profileStatus, logout } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
 
-  // Flash message dari halaman sebelumnya (misal: CreateTaskPage setelah berhasil)
+  // Flash message dari halaman sebelumnya
   const [flash, setFlash] = useState(location.state?.flash ?? null)
-
-  // Bersihkan flash setelah 5 detik
   useEffect(() => {
     if (!flash) return
     const t = setTimeout(() => setFlash(null), 5000)
     return () => clearTimeout(t)
   }, [flash])
 
-  // State untuk publish cepat dari dashboard
-  const [publishing, setPublishing] = useState(null)   // task.id yang sedang diproses
+  // State publish cepat dari dashboard
+  const [publishing, setPublishing] = useState(null)
   const [publishError, setPublishError] = useState(null)
 
   const {
     employerProfile,
     myTasks,
     taskSummary,
+    activeJobs,
     loading,
     error,
     reload,
   } = useDashboardEmployer()
 
-  // ── Navigasi ke halaman edit ──
+  // ── Fungsi perpindahan role ──
+  function handleSwitchToWorker() {
+    if (profileStatus?.has_worker_profile) {
+      setLastRole(user.id, 'worker')
+      navigate('/worker')
+    } else {
+      navigate('/worker/setup')
+    }
+  }
+
   function handleEdit(taskId) {
     navigate(`/tasks/${taskId}/edit`)
   }
 
-  // ── Publish langsung dari dashboard (untuk task draft) ──
   async function handlePublish(task) {
     if (publishing) return
     setPublishing(task.id)
@@ -148,47 +143,15 @@ export default function EmployerDashboard() {
     }
   }
 
-  // ── Loading state ──
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-slate-100 px-4 py-8">
-        <div className="mx-auto max-w-2xl space-y-4">
-          <SkeletonBlock className="h-24" />
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {[...Array(3)].map((_, i) => (
-              <SkeletonBlock key={i} className="h-20" />
-            ))}
-          </div>
-          <SkeletonBlock className="h-56" />
-        </div>
-      </main>
-    )
-  }
+  if (loading) return <DashboardSkeleton />
+  if (error) return <DashboardError message={error} onRetry={reload} />
 
-  // ── Error state ──
-  if (error) {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-slate-100 px-4">
-        <div className="w-full max-w-sm rounded-2xl bg-white p-8 text-center shadow-lg">
-          <AlertTriangle size={36} className="mx-auto text-amber-400" />
-          <h2 className="mt-3 font-semibold text-slate-900">
-            Gagal memuat dashboard
-          </h2>
-          <p className="mt-2 text-sm text-slate-500">{error}</p>
-          <button
-            onClick={reload}
-            className="mt-5 w-full rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white hover:bg-emerald-700"
-          >
-            Coba lagi
-          </button>
-        </div>
-      </main>
-    )
-  }
+  const greeting = getGreeting()
 
   return (
-    <main className="min-h-screen bg-slate-100 px-4 py-8">
-      <div className="mx-auto max-w-2xl space-y-6">
+    <main className="min-h-screen bg-slate-50 px-4 py-8">
+      {/* Wrapper max-width — proporsional di desktop, full-width di mobile */}
+      <div className="mx-auto w-full max-w-5xl space-y-5">
 
         {/* ── Flash message ── */}
         {flash && (
@@ -196,10 +159,13 @@ export default function EmployerDashboard() {
             role="status"
             className="flex items-start justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
           >
-            <span className="flex items-center gap-2"><CheckCircle2 size={16} className="shrink-0" />{flash}</span>
+            <span className="flex items-center gap-2">
+              <CheckCircle2 size={16} className="shrink-0 text-emerald-600" />
+              {flash}
+            </span>
             <button
               onClick={() => setFlash(null)}
-              className="shrink-0 text-emerald-500 hover:text-emerald-700"
+              className="shrink-0 text-emerald-500 transition hover:text-emerald-700"
               aria-label="Tutup"
             >
               <X size={16} />
@@ -207,230 +173,98 @@ export default function EmployerDashboard() {
           </div>
         )}
 
-        {/* ── Kartu profil Employer ── */}
-        <section className="rounded-2xl bg-white p-6 shadow-sm">
-          <div className="flex items-start gap-4">
-            {/* Avatar inisial */}
-            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-emerald-600 text-xl font-bold text-white select-none">
-              {(employerProfile?.display_name ?? user?.full_name ?? '?')[0].toUpperCase()}
-            </div>
+        {/* ── 1. Header profil ── */}
+        <EmployerProfileHeader
+          employerProfile={employerProfile}
+          user={user}
+          greeting={greeting}
+          onViewProfile={() => navigate('/employer/profile')}
+          onEditProfile={() => navigate('/employer/profile/edit')}
+          onSwitchRole={handleSwitchToWorker}
+        />
 
-            <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-semibold uppercase tracking-widest text-emerald-600">
-                      Employer
-                    </span>
-                    {employerProfile?.tipe_employer && (
-                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs text-emerald-700">
-                        {employerProfile.tipe_employer}
-                      </span>
-                    )}
-                    {employerProfile?.is_verified && (
-                      <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs text-blue-700 flex items-center gap-1">
-                        <BadgeCheck size={11} /> Terverifikasi
-                      </span>
-                    )}
-                  </div>
-                  <h1 className="mt-0.5 text-lg font-bold text-slate-900 leading-tight">
-                    {employerProfile?.display_name ?? user?.full_name}
-                  </h1>
-                  {employerProfile?.sektor && (
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      {employerProfile.sektor}
-                    </p>
-                  )}
-                  {employerProfile?.location && (
-                    <p className="text-xs text-slate-500 flex items-center gap-1">
-                      <MapPin size={11} className="shrink-0" /> {employerProfile.location}
-                    </p>
-                  )}
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <NotificationBell />
-                  <button
-                    onClick={() => navigate('/dashboard')}
-                    className="shrink-0 rounded-xl border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50"
-                  >
-                    Ganti peran
-                  </button>
-                </div>
-              </div>
-
-              {/* Tagline atau deskripsi */}
-              {employerProfile?.tagline ? (
-                <p className="mt-2 text-sm font-medium text-slate-600 italic">
-                  "{employerProfile.tagline}"
-                </p>
-              ) : employerProfile?.description ? (
-                <p className="mt-2 text-sm text-slate-500 line-clamp-2">
-                  {employerProfile.description}
-                </p>
-              ) : (
-                <p className="mt-2 text-sm text-slate-400 italic">
-                  Belum ada deskripsi — lengkapi profilmu.
-                </p>
-              )}
-
-              {/* Aksi profil */}
-              <div className="mt-3 flex gap-2">
-                <button
-                  onClick={() => navigate('/employer/profile')}
-                  className="rounded-lg bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 transition hover:bg-emerald-100"
-                >
-                  Lihat Profil
-                </button>
-                <button
-                  onClick={() => navigate('/employer/profile/edit')}
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
-                >
-                  Edit Profil
-                </button>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ── CTA buat tugas ── */}
-        <section className="flex flex-col gap-3 sm:flex-row">
-          <button
-            onClick={() => navigate('/tasks/create')}
-            className="flex-1 rounded-2xl bg-emerald-600 px-5 py-4 text-left text-white transition hover:bg-emerald-700"
-          >
-            <div className="flex items-center gap-2">
-              <Plus size={20} />
-              <p className="font-semibold">Buat tugas baru</p>
-            </div>
-            <p className="mt-0.5 text-xs text-emerald-200">
-              Posting pekerjaan dan cari Worker
-            </p>
-          </button>
-          <button
-            onClick={() => navigate('/employer/applications')}
-            className="flex-1 rounded-2xl border-2 border-emerald-200 bg-emerald-50 px-5 py-4 text-left transition hover:border-emerald-400 hover:bg-emerald-100"
-          >
-            <div className="flex items-center gap-2">
-              <LayoutList size={20} className="text-emerald-700" />
-              <p className="font-semibold text-emerald-800">Manajemen lamaran</p>
-            </div>
-            <p className="mt-0.5 text-xs text-emerald-600">Lihat & proses pelamar</p>
-          </button>
-        </section>
-
-        {/* ── CTA pekerjaan aktif ── */}
-        <button
-          onClick={() => navigate('/employer/jobs')}
-          className="w-full rounded-2xl border-2 border-blue-200 bg-blue-50 px-5 py-4 text-left transition hover:border-blue-400 hover:bg-blue-100"
-        >
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <Search size={20} className="text-blue-700" />
-                <p className="font-semibold text-blue-900">Pekerjaan Aktif</p>
-              </div>
-              <p className="mt-0.5 text-xs text-blue-600">
-                Tinjau bukti kerja dan setujui hasil pekerjaan Worker
-              </p>
-            </div>
-            <span className="shrink-0 rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-              Lihat →
-            </span>
-          </div>
-        </button>
-
-        {/* ── Ringkasan tugas ── */}
+        {/* ── 2. Ringkasan statistik ── */}
         <section>
-          <SectionHeader title="Ringkasan tugas" />
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <StatCard label="Total published" value={taskSummary.published} accent="slate" />
-            <StatCard label="Dibutuhkan" value={myTasks.reduce((s, t) => s + t.worker_needed, 0)} accent="blue" />
-            <StatCard
-              label="Total upah"
-              value={
-                myTasks.length === 0
-                  ? '—'
-                  : `${(myTasks.reduce((s, t) => s + Number(t.wage_amount), 0) / 1000).toFixed(0)}k`
-              }
-              accent="emerald"
-            />
+          <SectionHeader title="Ringkasan Task" />
+          <EmployerStatCards summary={taskSummary} />
+        </section>
+
+        {/* ── 3. Quick actions ── */}
+        <EmployerQuickActions
+          onCreateTask={() => navigate('/tasks/create')}
+          onManageApps={() => navigate('/employer/applications')}
+          onViewActiveJobs={() => navigate('/employer/jobs')}
+        />
+
+        {/* ── Layout dua kolom: kiri (pekerjaan berlangsung), kanan (daftar task) ── */}
+        {/* Desktop: 2 kolom. Tablet ke bawah: 1 kolom stacked. */}
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-5">
+
+          {/* Kolom kiri (lg: 2/5 lebar) — Pekerjaan berlangsung */}
+          <div className="lg:col-span-2">
+            <section>
+              <SectionHeader
+                title="Pekerjaan Berlangsung"
+                action={
+                  activeJobs.length > 0 && (
+                    <button
+                      onClick={() => navigate('/employer/jobs')}
+                      className="flex items-center gap-1 text-xs font-semibold text-blue-600 transition hover:text-blue-800"
+                    >
+                      Lihat semua <ChevronRight size={13} />
+                    </button>
+                  )
+                }
+              />
+              <EmployerActiveJobs
+                activeJobs={activeJobs}
+                onViewAll={() => navigate('/employer/jobs')}
+                onJobClick={(job) =>
+                  navigate(`/employer/jobs/${job.assignment_id ?? job.id}`)
+                }
+                onFindApps={() => navigate('/employer/applications')}
+              />
+            </section>
           </div>
 
-          {/* Catatan keterbatasan */}
-          {taskSummary.total === 0 && !loading && (
-            <p className="mt-2 text-center text-xs text-slate-400">
-              Hanya menampilkan tugas berstatus <strong>published</strong>.
-              Tugas draft atau closed belum tersedia dari API saat ini.
-            </p>
-          )}
-        </section>
+          {/* Kolom kanan (lg: 3/5 lebar) — Daftar task */}
+          <div className="lg:col-span-3">
+            <section>
+              <SectionHeader
+                title="Task yang Dibuat"
+                action={
+                  myTasks.length > 0 && (
+                    <button
+                      onClick={() => navigate('/employer/applications')}
+                      className="flex items-center gap-1 text-xs font-semibold text-blue-600 transition hover:text-blue-800"
+                    >
+                      <TrendingUp size={13} />
+                      Kelola semua
+                    </button>
+                  )
+                }
+              />
+              <EmployerTaskList
+                tasks={myTasks}
+                publishing={publishing}
+                publishError={publishError}
+                onEdit={handleEdit}
+                onPublish={handlePublish}
+                onViewAll={() => navigate('/employer/applications')}
+                onCreateTask={() => navigate('/tasks/create')}
+                onDismissError={() => setPublishError(null)}
+              />
+            </section>
+          </div>
 
-        {/* ── Daftar tugas ── */}
-        <section>
-          <SectionHeader
-            title="Tugas yang dibuat"
-            action={
-              taskSummary.total > 0 && (
-                <span className="text-xs text-slate-400">
-                  {taskSummary.total} tugas
-                </span>
-              )
-            }
-          />
-
-          {/* Error publish inline */}
-          {publishError && (
-            <div
-              role="alert"
-              className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-            >
-              {publishError}
-              <button
-                onClick={() => setPublishError(null)}
-                className="ml-2 font-medium underline underline-offset-2 hover:no-underline"
-              >
-                Tutup
-              </button>
-            </div>
-          )}
-
-          {myTasks.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-slate-300 py-10 text-center">
-              <FileText size={28} className="mx-auto text-slate-300" />
-              <p className="mt-2 text-sm font-medium text-slate-600">
-                Belum ada tugas yang dibuat
-              </p>
-              <p className="mt-1 text-xs text-slate-400">
-                Buat tugas pertamamu dan mulai cari Worker.
-              </p>
-              <button
-                onClick={() => navigate('/tasks/create')}
-                className="mt-4 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
-              >
-                Buat tugas sekarang
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {myTasks.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  onEdit={handleEdit}
-                  onPublish={handlePublish}
-                  publishing={publishing}
-                />
-              ))}
-            </div>
-          )}
-        </section>
+        </div>
 
         {/* ── Footer ── */}
-        <div className="flex items-center justify-between pb-6 text-xs text-slate-400">
-          <span>Kerjain · Employer</span>
+        <div className="flex items-center justify-between border-t border-slate-200 pb-6 pt-4 text-xs text-slate-400">
+          <span>Kerjain · Employer Dashboard</span>
           <button
             onClick={logout}
-            className="hover:text-slate-600 hover:underline underline-offset-2"
+            className="transition hover:text-slate-600 hover:underline underline-offset-2"
           >
             Keluar
           </button>

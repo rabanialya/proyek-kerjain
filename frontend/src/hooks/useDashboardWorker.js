@@ -25,6 +25,7 @@ export function useDashboardWorker() {
   const [workerProfile, setWorkerProfile] = useState(null)
   const [applications, setApplications] = useState([])
   const [recentTasks, setRecentTasks] = useState([])
+  const [activeJobs, setActiveJobs] = useState([])
   const [activeJobsCount, setActiveJobsCount] = useState(0)
 
   const [loading, setLoading] = useState(true)
@@ -76,11 +77,12 @@ export function useDashboardWorker() {
       if (jobsResult.status === 'fulfilled') {
         const jobs = jobsResult.value ?? []
         const activeStatuses = ['assigned', 'in_progress', 'submitted']
-        setActiveJobsCount(
-          jobs.filter((j) => activeStatuses.includes(j.assignment_status)).length,
-        )
+        const filtered = jobs.filter((j) => activeStatuses.includes(j.assignment_status))
+        setActiveJobs(filtered)
+        setActiveJobsCount(filtered.length)
       } else {
         console.warn('Gagal mengambil worker jobs:', jobsResult.reason)
+        setActiveJobs([])
         setActiveJobsCount(0)
       }
     } catch (err) {
@@ -107,6 +109,7 @@ export function useDashboardWorker() {
     applications,
     applicationSummary,
     recentTasks,
+    activeJobs,
     activeJobsCount,
     loading,
     error,
