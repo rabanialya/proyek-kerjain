@@ -204,6 +204,15 @@ export default function AdminUserDetailPage() {
   const workerSkills = parseJsonList(user.worker_profile?.skills)
   const workerShift = parseJsonList(user.worker_profile?.preferensi_shift)
 
+  // Label role detail
+  function getRoleLabel() {
+    if (user.is_admin) return 'Admin'
+    const parts = []
+    if (hasWorker)   parts.push('Worker')
+    if (hasEmployer) parts.push('Employer')
+    return parts.length > 0 ? parts.join(' & ') : 'Pengguna'
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       {/* Navigasi balik */}
@@ -225,11 +234,26 @@ export default function AdminUserDetailPage() {
             <p className="text-sm text-slate-500">{user.email}</p>
           </div>
         </div>
-        {/* Badge status */}
-        <div className="flex items-center gap-3">
+        {/* Badge role & status */}
+        <div className="flex flex-wrap items-center gap-2">
           {user.is_admin && (
             <span className="rounded-full bg-purple-100 px-3 py-1 text-xs font-semibold text-purple-700">
               Admin
+            </span>
+          )}
+          {!user.is_admin && hasWorker && (
+            <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+              Worker
+            </span>
+          )}
+          {!user.is_admin && hasEmployer && (
+            <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+              Employer
+            </span>
+          )}
+          {!user.is_admin && !hasWorker && !hasEmployer && (
+            <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+              Pengguna
             </span>
           )}
           {user.is_active ? (
@@ -264,7 +288,7 @@ export default function AdminUserDetailPage() {
         <InfoRow label="Nama Lengkap" value={user.full_name} />
         <InfoRow label="Email" value={user.email} />
         <InfoRow label="Nomor Telepon" value={user.phone} />
-        <InfoRow label="Role" value={user.is_admin ? 'Admin' : 'Pengguna'} />
+        <InfoRow label="Role" value={getRoleLabel()} />
         <InfoRow label="Tanggal Daftar" value={formatDate(user.created_at, true)} />
         <InfoRow label="Terakhir Diperbarui" value={formatDate(user.updated_at, true)} />
         <InfoRow label="Status Akun" value={user.is_active ? 'Aktif' : 'Nonaktif'} />

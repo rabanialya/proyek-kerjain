@@ -14,9 +14,15 @@ function formatDate(iso) {
   })
 }
 
-function getRoleBadge(user) {
-  if (user.is_admin) return { label: 'Admin', cls: 'bg-purple-100 text-purple-700' }
-  return { label: 'Pengguna', cls: 'bg-slate-100 text-slate-600' }
+function getRoleBadges(user) {
+  if (user.is_admin) {
+    return [{ label: 'Admin', cls: 'bg-purple-100 text-purple-700' }]
+  }
+  const badges = []
+  if (user.worker_profile)   badges.push({ label: 'Worker',   cls: 'bg-blue-100 text-blue-700' })
+  if (user.employer_profile) badges.push({ label: 'Employer', cls: 'bg-emerald-100 text-emerald-700' })
+  if (badges.length === 0)   badges.push({ label: 'Pengguna', cls: 'bg-slate-100 text-slate-600' })
+  return badges
 }
 
 // ─── Skeleton ─────────────────────────────────────────────────────────────
@@ -58,7 +64,9 @@ function FilterBar({ search, onSearch, roleFilter, onRoleFilter, statusFilter, o
       >
         <option value="">Semua Role</option>
         <option value="admin">Admin</option>
-        <option value="user">Pengguna</option>
+        <option value="worker">Worker</option>
+        <option value="employer">Employer</option>
+        <option value="user">Pengguna (tanpa profil)</option>
       </select>
 
       {/* Filter status */}
@@ -122,8 +130,10 @@ export default function AdminUsersPage() {
 
     const matchRole =
       !roleFilter ||
-      (roleFilter === 'admin' && u.is_admin) ||
-      (roleFilter === 'user' && !u.is_admin)
+      (roleFilter === 'admin'    && u.is_admin) ||
+      (roleFilter === 'worker'   && !u.is_admin && Boolean(u.worker_profile)) ||
+      (roleFilter === 'employer' && !u.is_admin && Boolean(u.employer_profile)) ||
+      (roleFilter === 'user'     && !u.is_admin && !u.worker_profile && !u.employer_profile)
 
     const matchStatus =
       !statusFilter ||
@@ -212,7 +222,7 @@ export default function AdminUsersPage() {
                 </tr>
               ) : (
                 paginated.map((user) => {
-                  const role = getRoleBadge(user)
+                  const roles = getRoleBadges(user)
                   return (
                     <tr key={user.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-3">
@@ -226,9 +236,13 @@ export default function AdminUsersPage() {
                       </td>
                       <td className="px-4 py-3 text-slate-600">{user.email}</td>
                       <td className="px-4 py-3">
-                        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${role.cls}`}>
-                          {role.label}
-                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          {roles.map((r) => (
+                            <span key={r.label} className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${r.cls}`}>
+                              {r.label}
+                            </span>
+                          ))}
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-slate-500">{formatDate(user.created_at)}</td>
                       <td className="px-4 py-3">

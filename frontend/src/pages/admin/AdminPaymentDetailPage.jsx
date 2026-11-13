@@ -199,6 +199,106 @@ function ConfirmDialog({ isOpen, title, description, children, onCancel, onConfi
   )
 }
 
+// ─── Kotak info pembayaran Worker (auto-fill dari profil) ────────────────
+//
+// Menampilkan metode pembayaran + detail rekening/e-wallet yang sudah
+// diisi Worker di profil mereka, sehingga Admin tahu ke mana harus transfer.
+
+function WorkerPaymentInfoBox({ info }) {
+  if (!info) {
+    return (
+      <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-3 text-xs text-slate-400">
+        Worker belum mengisi data pembayaran di profil mereka.
+      </div>
+    )
+  }
+
+  const hasCash = info.accepted_payment_methods?.includes('cash')
+  const hasBank = info.accepted_payment_methods?.includes('transfer_bank')
+  const hasEwallet = info.accepted_payment_methods?.includes('e_wallet')
+  const hasAny = hasCash || hasBank || hasEwallet
+
+  return (
+    <div className="rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 space-y-3">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-blue-700">
+          Info Pembayaran Worker
+        </p>
+        {info.worker_name && (
+          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-700">
+            {info.worker_name}
+          </span>
+        )}
+      </div>
+
+      {/* Metode yang diterima */}
+      {hasAny ? (
+        <div className="flex flex-wrap gap-1.5">
+          {hasCash && (
+            <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+              💵 Cash
+            </span>
+          )}
+          {hasBank && (
+            <span className="rounded-md bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+              🏦 Transfer Bank
+            </span>
+          )}
+          {hasEwallet && (
+            <span className="rounded-md bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">
+              📱 E-Wallet
+            </span>
+          )}
+        </div>
+      ) : (
+        <p className="text-xs text-slate-400">Belum ada metode yang dipilih.</p>
+      )}
+
+      {/* Detail Transfer Bank */}
+      {hasBank && info.bank_details && (
+        <div className="rounded-lg border border-green-200 bg-white px-3 py-2.5 space-y-1.5">
+          <p className="text-xs font-semibold text-green-700">Detail Rekening Bank</p>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+            <span className="text-slate-500">Nama Bank</span>
+            <span className="font-semibold text-slate-800 select-all">
+              {info.bank_details.bank_name ?? '—'}
+            </span>
+            <span className="text-slate-500">Nomor Rekening</span>
+            <span className="font-mono font-semibold text-slate-800 select-all tracking-wide">
+              {info.bank_details.account_number ?? '—'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Detail E-Wallet */}
+      {hasEwallet && info.ewallet_details && (
+        <div className="rounded-lg border border-indigo-200 bg-white px-3 py-2.5 space-y-1.5">
+          <p className="text-xs font-semibold text-indigo-700">Detail E-Wallet</p>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+            <span className="text-slate-500">Provider</span>
+            <span className="font-semibold text-slate-800 select-all">
+              {info.ewallet_details.provider ?? '—'}
+            </span>
+            <span className="text-slate-500">Nomor Telepon</span>
+            <span className="font-mono font-semibold text-slate-800 select-all tracking-wide">
+              {info.ewallet_details.phone_number ?? '—'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Info cash saja */}
+      {hasCash && !hasBank && !hasEwallet && (
+        <p className="text-xs text-slate-500">
+          💡 Worker menerima cash — pembayaran dilakukan langsung tanpa transfer.
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ─── Panel rincian pencairan (sudah disbursed) ────────────────────────────
 
 function DisburseInfoPanel({ payment }) {
@@ -223,6 +323,13 @@ function DisburseInfoPanel({ payment }) {
           }
         />
       </dl>
+
+      {/* Info rekening Worker yang menerima transfer */}
+      {payment.worker_payment_info && (
+        <div className="pt-1">
+          <WorkerPaymentInfoBox info={payment.worker_payment_info} />
+        </div>
+      )}
 
       {payment.disbursement_proof_url ? (
         <div className="pt-2">
@@ -471,6 +578,9 @@ function ActionPanel({ payment, onSuccess }) {
             <span className="text-sm text-slate-600">Nominal Pencairan</span>
             <span className="text-sm font-bold text-slate-800">{formatCurrency(payment.amount)}</span>
           </div>
+
+          {/* Info pembayaran Worker — otomatis dari profil */}
+          <WorkerPaymentInfoBox info={payment.worker_payment_info ?? null} />
 
           {actionError && (
             <div className="rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
