@@ -27,6 +27,8 @@ class PublicWorkerProfileResponse(BaseModel):
     Tidak mengandung email, nomor telepon, atau informasi sensitif lainnya.
     """
     id: UUID
+    # user_id dibutuhkan oleh fitur Report agar pelapor dapat mengirim reported_user_id
+    user_id: UUID
     full_name: str
     avatar_url: str | None = None
     nickname: str | None = None
@@ -63,6 +65,8 @@ class PublicEmployerProfileResponse(BaseModel):
     Tidak mengandung contact_email, whatsapp, atau informasi kontak pribadi lainnya.
     """
     id: UUID
+    # user_id dibutuhkan oleh fitur Report agar pelapor dapat mengirim reported_user_id
+    user_id: UUID
     display_name: str
     avatar_url: str | None = None
     tipe_employer: str | None = None
@@ -167,6 +171,7 @@ def get_public_worker_profile(
 
     return PublicWorkerProfileResponse(
         id=profile.id,
+        user_id=profile.user_id,
         full_name=user.full_name,
         avatar_url=user.avatar_url,
         nickname=profile.nickname,
@@ -216,6 +221,7 @@ def get_public_employer_profile(
 
     return PublicEmployerProfileResponse(
         id=profile.id,
+        user_id=profile.user_id,
         display_name=profile.display_name,
         avatar_url=user.avatar_url,
         tipe_employer=profile.tipe_employer,

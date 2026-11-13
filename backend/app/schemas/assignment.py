@@ -85,6 +85,10 @@ class WorkerJobResponse(BaseModel):
     # ── Employer (hanya info yang boleh dilihat Worker) ─────────────────
     employer_display_name: str
 
+    # ID yang dibutuhkan untuk fitur rating & report
+    employer_user_id: UUID | None = None
+    employer_profile_id: UUID | None = None
+
     class Config:
         from_attributes = True
 
@@ -135,6 +139,10 @@ class EmployerJobResponse(BaseModel):
     worker_email: str | None = None
     worker_phone: str | None = None
     worker_rating_avg: float = 0.0
+
+    # ID yang dibutuhkan untuk fitur rating & report
+    worker_user_id: UUID | None = None
+    worker_profile_id: UUID | None = None
 
     class Config:
         from_attributes = True

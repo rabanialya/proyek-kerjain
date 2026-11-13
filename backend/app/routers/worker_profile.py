@@ -12,6 +12,7 @@ from app.schemas.worker_profile import (
     WorkerProfileCreate,
     WorkerProfileResponse,
     WorkerProfileUpdate,
+    dict_to_json,
     list_to_json,
 )
 from app.utils.dependencies import get_current_user, get_session
@@ -27,17 +28,25 @@ _JSON_LIST_FIELDS = frozenset(
     {"skills", "preferensi_shift", "hari_tersedia", "accepted_payment_methods"}
 )
 
+# Field yang disimpan sebagai JSON string di DB (input: dict | None)
+_JSON_DICT_FIELDS = frozenset({"bank_details", "ewallet_details"})
+
 
 def _apply_data_to_profile(profile: WorkerProfile, data: dict) -> None:
     """
     Terapkan dict data ke atribut model WorkerProfile.
 
-    Field multi-select (list) dikonversi ke JSON string sebelum disimpan.
-    Field lain diset langsung.
+    Field multi-select (list) dan detail pembayaran (dict) dikonversi ke JSON
+    string sebelum disimpan. Field lain diset langsung.
     """
     for field, value in data.items():
         if field in _JSON_LIST_FIELDS:
             setattr(profile, field, list_to_json(value))
+        elif field in _JSON_DICT_FIELDS:
+            # Pydantic model (BankDetails/EwalletDetails) → dict → JSON string
+            if hasattr(value, 'model_dump'):
+                value = value.model_dump()
+            setattr(profile, field, dict_to_json(value))
         else:
             setattr(profile, field, value)
     profile.updated_at = datetime.now(timezone.utc)

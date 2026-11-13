@@ -337,6 +337,10 @@ def get_worker_my_jobs(
             if employer_profile
             else "Employer tidak ditemukan"
         )
+        # Ambil user_id employer untuk fitur rating & report
+        employer_user: User | None = None
+        if employer_profile:
+            employer_user = session.get(User, employer_profile.user_id)
 
         result.append(
             WorkerJobResponse(
@@ -372,6 +376,8 @@ def get_worker_my_jobs(
                 category_id=task.category_id,
                 category_name=category.name if category else None,
                 employer_display_name=employer_display,
+                employer_user_id=employer_profile.user_id if employer_profile else None,
+                employer_profile_id=employer_profile.id if employer_profile else None,
             )
         )
 
@@ -524,6 +530,8 @@ def get_employer_my_jobs(
                 worker_email=worker_email,
                 worker_phone=worker_phone,
                 worker_rating_avg=worker_rating,
+                worker_user_id=worker_profile.user_id if worker_profile else None,
+                worker_profile_id=worker_profile.id if worker_profile else None,
             )
         )
 

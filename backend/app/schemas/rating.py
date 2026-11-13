@@ -31,3 +31,6 @@ class RatingResponse(BaseModel):
     review: str | None = None
 
     created_at: datetime
+
+    class Config:
+        from_attributes = True
