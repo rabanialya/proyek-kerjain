@@ -107,17 +107,19 @@ export function AuthProvider({ children }) {
 
     // Ambil status profil setelah login berhasil.
     setProfileLoading(true)
+    let rawStatus = null
     try {
-      const raw = await fetchProfileStatus()
-      setProfileStatus(normalizeProfileStatus(raw))
+      rawStatus = await fetchProfileStatus()
+      setProfileStatus(normalizeProfileStatus(rawStatus))
     } catch {
       setProfileStatus(null)
     } finally {
       setProfileLoading(false)
     }
 
-    // Kembalikan user agar komponen Login bisa menentukan redirect berdasarkan role.
-    return currentUser
+    // Kembalikan { user, profileStatus } agar komponen Login bisa menentukan
+    // redirect cerdas berdasarkan profil yang dimiliki.
+    return { user: currentUser, profileStatus: rawStatus ? normalizeProfileStatus(rawStatus) : null }
   }
 
   function logout() {

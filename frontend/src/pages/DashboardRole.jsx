@@ -1,35 +1,63 @@
 import { useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
+import { getLastRole, setLastRole } from '../lib/lastRole'
 import { Hammer, Building2 } from 'lucide-react'
 
 /**
  * Dashboard pemilihan peran.
  *
- * Pengguna memilih Worker atau Employer.
- * Jika profil untuk peran tersebut sudah ada → arahkan ke halaman peran.
- * Jika belum ada → arahkan ke form pembuatan profil.
+ * Logika smart redirect:
+ * - Admin                        → /admin
+ * - Hanya punya WorkerProfile    → langsung /worker
+ * - Hanya punya EmployerProfile  → langsung /employer
+ * - Punya kedua + ada lastRole   → langsung ke lastRole dashboard
+ * - Punya kedua + tanpa lastRole → tampilkan pilihan
+ * - Belum punya profil apapun    → tampilkan pilihan (akan ke /setup)
  *
  * Satu akun boleh punya kedua peran sekaligus.
- *
- * Admin yang membuka halaman ini (langsung via URL atau redirect lama)
- * otomatis diarahkan ke /admin sebelum halaman dirender.
  */
 export default function DashboardRole() {
   const { user, profileStatus, profileLoading, logout } = useAuth()
   const navigate = useNavigate()
 
-  // Admin tidak boleh melihat halaman pemilihan role ini.
-  // Tangani kasus: Admin membuka /dashboard secara manual atau
-  // datang dari redirect lama yang belum diperbaiki.
   useEffect(() => {
+    // Admin tidak boleh di halaman ini.
     if (user?.is_admin) {
       navigate('/admin', { replace: true })
+      return
     }
-  }, [user, navigate])
+
+    // Jangan redirect sebelum profileStatus selesai dimuat.
+    if (profileLoading || profileStatus === null) return
+
+    const hasWorker = profileStatus.has_worker_profile
+    const hasEmployer = profileStatus.has_employer_profile
+
+    if (hasWorker && !hasEmployer) {
+      // Hanya punya Worker → langsung masuk.
+      setLastRole(user.id, 'worker')
+      navigate('/worker', { replace: true })
+    } else if (hasEmployer && !hasWorker) {
+      // Hanya punya Employer → langsung masuk.
+      setLastRole(user.id, 'employer')
+      navigate('/employer', { replace: true })
+    } else if (hasWorker && hasEmployer) {
+      // Punya keduanya → pakai preferensi terakhir jika ada.
+      const lastRole = getLastRole(user.id)
+      if (lastRole === 'worker') {
+        navigate('/worker', { replace: true })
+      } else if (lastRole === 'employer') {
+        navigate('/employer', { replace: true })
+      }
+      // lastRole null → tampilkan pilihan (tidak redirect)
+    }
+    // Tidak punya profil apapun → tampilkan pilihan
+  }, [user, profileStatus, profileLoading, navigate])
 
   function handleSelectWorker() {
     if (profileStatus?.has_worker_profile) {
+      setLastRole(user.id, 'worker')
       navigate('/worker')
     } else {
       navigate('/worker/setup')
@@ -38,6 +66,7 @@ export default function DashboardRole() {
 
   function handleSelectEmployer() {
     if (profileStatus?.has_employer_profile) {
+      setLastRole(user.id, 'employer')
       navigate('/employer')
     } else {
       navigate('/employer/setup')
@@ -60,19 +89,20 @@ export default function DashboardRole() {
           </p>
         </div>
 
-        {/* Status profil loading */}
-        {profileLoading && (
-          <p className="mb-6 text-center text-sm text-slate-400">
-            Memeriksa status profil...
-          </p>
+        {/* Loading profil — saat redirect otomatis sedang diproses */}
+        {(profileLoading || profileStatus === null) && (
+          <div className="mb-6 flex flex-col items-center gap-2">
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+            <p className="text-sm text-slate-400">Memeriksa status profil...</p>
+          </div>
         )}
 
-        {/* Kartu pilihan peran */}
+        {/* Kartu pilihan peran — hanya tampil saat tidak ada auto-redirect */}
         <div className="grid gap-4 sm:grid-cols-2">
           {/* Worker */}
           <button
             onClick={handleSelectWorker}
-            disabled={profileLoading}
+            disabled={profileLoading || profileStatus === null}
             className="group flex flex-col items-center gap-3 rounded-2xl border-2 border-slate-200 p-6 text-left transition hover:border-blue-500 hover:bg-blue-50 disabled:opacity-50"
           >
             <span className="text-3xl"><Hammer size={32} className="text-blue-600" /></span>
@@ -91,7 +121,7 @@ export default function DashboardRole() {
           {/* Employer */}
           <button
             onClick={handleSelectEmployer}
-            disabled={profileLoading}
+            disabled={profileLoading || profileStatus === null}
             className="group flex flex-col items-center gap-3 rounded-2xl border-2 border-slate-200 p-6 text-left transition hover:border-emerald-500 hover:bg-emerald-50 disabled:opacity-50"
           >
             <span className="text-3xl"><Building2 size={32} className="text-emerald-600" /></span>

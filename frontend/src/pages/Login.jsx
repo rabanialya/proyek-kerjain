@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import KerjainLogo from '../components/KerjainLogo'
+import { getLastRole, setLastRole } from '../lib/lastRole'
 
 function Login() {
   const { login } = useAuth()
@@ -26,14 +27,37 @@ function Login() {
     try {
       // login() di AuthContext menangani: POST /auth/login → simpan token →
       // GET /auth/me → GET /profiles/status.
-      // Mengembalikan objek user agar kita bisa redirect berdasarkan role.
-      const loggedInUser = await login(email, password)
+      // Mengembalikan { user, profileStatus } agar kita bisa redirect cerdas.
+      const { user: loggedInUser, profileStatus } = await login(email, password)
 
-      // Admin diarahkan langsung ke dashboard Admin.
-      // Worker/Employer diarahkan ke halaman pemilihan peran seperti biasa.
+      // Admin → langsung ke /admin, tidak perlu cek profil.
       if (loggedInUser?.is_admin) {
         navigate('/admin', { replace: true })
+        return
+      }
+
+      const hasWorker = profileStatus?.has_worker_profile ?? false
+      const hasEmployer = profileStatus?.has_employer_profile ?? false
+
+      if (hasWorker && hasEmployer) {
+        // Punya kedua profil — gunakan preferensi role terakhir.
+        const lastRole = getLastRole(loggedInUser.id)
+        if (lastRole === 'employer') {
+          navigate('/employer', { replace: true })
+        } else if (lastRole === 'worker') {
+          navigate('/worker', { replace: true })
+        } else {
+          // Belum ada preferensi — tampilkan pilihan.
+          navigate('/dashboard', { replace: true })
+        }
+      } else if (hasWorker) {
+        setLastRole(loggedInUser.id, 'worker')
+        navigate('/worker', { replace: true })
+      } else if (hasEmployer) {
+        setLastRole(loggedInUser.id, 'employer')
+        navigate('/employer', { replace: true })
       } else {
+        // Belum punya profil apapun — ke halaman pemilihan role.
         navigate('/dashboard', { replace: true })
       }
     } catch (err) {
