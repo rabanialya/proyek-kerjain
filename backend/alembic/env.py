@@ -20,6 +20,7 @@ from app.models.dispute import Dispute
 from app.models.report import Report
 from app.models.notification import Notification
 from app.models.activity_log import ActivityLog
+from app.models.platform_config import PlatformConfig  # noqa: F401
 
 # Alembic Config object
 config = context.config

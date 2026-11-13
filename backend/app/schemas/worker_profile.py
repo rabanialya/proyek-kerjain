@@ -6,7 +6,12 @@ Konvensi multi-select:
 - Storage (DB)             : JSON string, contoh '["cash","transfer_bank"]'
 - Output (Response)        : list[str] | None  (di-parse dari JSON string)
 
-Konversi antara list dan JSON string dilakukan di router, bukan di schema,
+Konvensi detail pembayaran (bank_details / ewallet_details):
+- Input  (Create / Update) : dict | None
+- Storage (DB)             : JSON string, contoh '{"bank_name":"BCA","account_number":"123"}'
+- Output (Response)        : dict | None  (di-parse dari JSON string)
+
+Konversi antara list/dict dan JSON string dilakukan di router, bukan di schema,
 agar schema tetap mendeskripsikan kontrak API yang bersih.
 """
 
@@ -41,6 +46,28 @@ def list_to_json(value: list[str] | None) -> str | None:
     return json.dumps(value, ensure_ascii=False)
 
 
+def dict_to_json(value: dict | None) -> str | None:
+    """Konversi dict ke JSON string untuk disimpan di kolom TEXT."""
+    if value is None:
+        return None
+    return json.dumps(value, ensure_ascii=False)
+
+
+def json_to_dict(value: str | None) -> dict | None:
+    """Parse JSON string dari DB menjadi dict."""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return value
+    try:
+        parsed = json.loads(value)
+        if isinstance(parsed, dict):
+            return parsed
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return None
+
+
 def json_to_list(value: str | None) -> list[str] | None:
     """Parse JSON string (atau comma-separated lama) dari DB menjadi list."""
     if value is None:
@@ -55,6 +82,24 @@ def json_to_list(value: str | None) -> list[str] | None:
         pass
     # Fallback untuk data lama yang tersimpan sebagai comma-separated
     return [x.strip() for x in value.split(",") if x.strip()]
+
+
+# ── Sub-schema detail pembayaran ──────────────────────────────────────────────
+
+class BankDetails(BaseModel):
+    """Detail rekening bank worker untuk pembayaran transfer."""
+    bank_name: str
+    """Nama bank, contoh: BCA, Mandiri, BRI, BNI, BTN, atau nama custom."""
+    account_number: str
+    """Nomor rekening bank."""
+
+
+class EwalletDetails(BaseModel):
+    """Detail e-wallet worker untuk pembayaran digital."""
+    provider: str
+    """Nama provider, contoh: Dana, OVO, GoPay, LinkAja, ShopeePay, atau nama custom."""
+    phone_number: str
+    """Nomor telepon yang terdaftar di e-wallet."""
 
 
 # ── Schema Input — Worker ──────────────────────────────────────────────────────
@@ -77,6 +122,13 @@ class WorkerProfileCreate(BaseModel):
 
     # Metode pembayaran
     accepted_payment_methods: list[str] | None = None
+
+    # Detail pembayaran (wajib diisi jika metode terkait dipilih)
+    bank_details: BankDetails | None = None
+    """Wajib diisi jika accepted_payment_methods menyertakan 'transfer_bank'."""
+
+    ewallet_details: EwalletDetails | None = None
+    """Wajib diisi jika accepted_payment_methods menyertakan 'e_wallet'."""
 
     @field_validator("status_pekerjaan")
     @classmethod
@@ -186,6 +238,8 @@ class WorkerProfileResponse(BaseModel):
     hari_tersedia: list[str] | None = None
     tanggal_mulai: date | None = None
     accepted_payment_methods: list[str] | None = None
+    bank_details: dict | None = None
+    ewallet_details: dict | None = None
     cv_url: str | None = None
     id_document_url: str | None = None
     rating_avg: float
@@ -203,3 +257,9 @@ class WorkerProfileResponse(BaseModel):
     def _parse_json_list(cls, v) -> list[str] | None:
         """Parse JSON string dari DB menjadi list saat membentuk response."""
         return json_to_list(v)
+
+    @field_validator("bank_details", "ewallet_details", mode="before")
+    @classmethod
+    def _parse_json_dict(cls, v) -> dict | None:
+        """Parse JSON string dari DB menjadi dict saat membentuk response."""
+        return json_to_dict(v)

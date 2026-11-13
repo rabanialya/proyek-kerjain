@@ -76,6 +76,22 @@ class WorkerProfile(SQLModel, table=True):
     Contoh: '["cash","transfer_bank","e_wallet"]'.
     """
 
+    # ── Detail rekening pembayaran ────────────────────────────────────────
+
+    bank_details: str | None = None
+    """
+    Detail rekening bank dalam format JSON string.
+    Contoh: '{"bank_name": "BCA", "account_number": "1234567890"}'
+    Diisi jika worker menerima transfer_bank.
+    """
+
+    ewallet_details: str | None = None
+    """
+    Detail e-wallet dalam format JSON string.
+    Contoh: '{"provider": "Dana", "phone_number": "081234567890"}'
+    Diisi jika worker menerima e_wallet.
+    """
+
     # ── Dokumen ────────────────────────────────────────────────────────────
 
     cv_url: str | None = None
