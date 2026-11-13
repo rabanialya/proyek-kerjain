@@ -36,11 +36,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlmodel import Session, select
 
-from app.config.platform import PLATFORM_BANK_INFO
 from app.models.application import Application
 from app.models.assignment import Assignment
 from app.models.employer_profile import EmployerProfile
 from app.models.payment import Payment
+from app.models.platform_config import PlatformConfig
 from app.models.task import Task
 from app.models.user import User
 from app.models.worker_profile import WorkerProfile
@@ -92,6 +92,37 @@ def _build_reference_code(assignment_id: UUID) -> str:
     """Kode referensi unik untuk tracking transfer."""
     short = str(assignment_id).replace("-", "")[:12].upper()
     return f"KRJ-{short}"
+
+
+def _get_platform_bank_info(session: Session) -> dict:
+    """
+    Ambil konfigurasi rekening platform dari DB.
+    Jika belum ada / belum dikonfigurasi, kembalikan dict dengan is_configured=False.
+    """
+    config = session.exec(
+        select(PlatformConfig).order_by(PlatformConfig.created_at.desc())
+    ).first()
+
+    if not config or not config.is_configured:
+        return {
+            "is_configured": False,
+            "payment_type": "",
+            "bank_name": "",
+            "account_number": "",
+            "account_holder": "",
+            "branch": "",
+            "transfer_note": "Rekening platform belum dikonfigurasi. Hubungi Admin Kerjain.",
+        }
+
+    return {
+        "is_configured": True,
+        "payment_type": config.payment_type,
+        "bank_name": config.bank_name,
+        "account_number": config.account_number,
+        "account_holder": config.account_holder,
+        "branch": config.branch,
+        "transfer_note": config.transfer_note,
+    }
 
 
 # =========================================================
@@ -335,7 +366,7 @@ def settle_assignment_payment(
         platform_fee_amount=platform_fee_amount,
         total_transfer=total_transfer,
         reference_code=work_payment.transaction_reference or _build_reference_code(assignment.id),
-        platform_bank_info=PLATFORM_BANK_INFO,
+        platform_bank_info=_get_platform_bank_info(session),
     )
 
 
@@ -493,11 +524,27 @@ def upload_transfer_proof(
 # =========================================================
 # GET MY PAYMENTS
 # =========================================================
+# GET PLATFORM BANK INFO
+# Dapat dipanggil Employer kapan saja untuk mendapatkan info
+# rekening tujuan transfer platform (tidak perlu settle ulang).
+# =========================================================
 
 @router.get(
-    "/my",
-    response_model=list[PaymentResponse]
+    "/platform-bank-info",
+    summary="Info rekening platform untuk Employer",
 )
+def get_platform_bank_info(
+    current_user: User = Depends(get_current_user),
+    session: Session = Depends(get_session),
+):
+    """
+    Mengembalikan informasi rekening platform tujuan transfer.
+    Digunakan Employer yang sudah punya tagihan dan ingin mengecek rekening tujuan.
+    """
+    return _get_platform_bank_info(session)
+
+
+# =========================================================
 def get_my_payments(
     current_user: User = Depends(get_current_user),
     session: Session = Depends(get_session)

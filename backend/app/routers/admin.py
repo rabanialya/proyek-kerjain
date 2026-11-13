@@ -1,5 +1,4 @@
-from uuid import UUID
-
+import json
 import os
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -27,6 +26,7 @@ from app.schemas.admin import (
     AdminStatsResponse,
     AdminUserResponse,
     AdminUserDetailResponse,
+    WorkerPaymentInfo,
 )
 from app.schemas.payment import PaymentResponse  # noqa: F401 — dipakai oleh endpoint admin payment jika diperlukan
 from app.models.report import Report
@@ -37,6 +37,8 @@ from app.schemas.activity_log import ActivityLogResponse
 from app.models.category import Category
 from app.schemas.category import CategoryResponse, CategoryCreate, CategoryUpdate
 from app.schemas.task import TaskResponse
+from app.models.platform_config import PlatformConfig
+from app.schemas.platform_config import PlatformBankInfoUpdate, PlatformBankInfoResponse
 
 # Folder penyimpanan bukti transfer keluar (Admin → Worker) — privat, tidak dapat diakses publik.
 # File lama di uploads/disbursement-proof/ tetap dilayani via router files.py (fallback).
@@ -132,18 +134,40 @@ def get_admin_stats(
 
 @router.get(
     "/users",
-    response_model=list[AdminUserResponse],
+    response_model=list[AdminUserDetailResponse],
     summary="Daftar semua pengguna (Admin)",
 )
 def get_all_users(
     session: Session = Depends(get_session),
     current_admin: User = Depends(get_current_admin),
 ):
-    """Mengembalikan semua user terdaftar, diurutkan terbaru dulu. Tanpa password_hash."""
+    """Mengembalikan semua user terdaftar beserta profil worker/employer (jika ada), diurutkan terbaru dulu."""
     users = session.exec(
         select(User).order_by(User.created_at.desc())
     ).all()
-    return users
+
+    result = []
+    for user in users:
+        worker_profile = session.exec(
+            select(WorkerProfile).where(WorkerProfile.user_id == user.id)
+        ).first()
+        employer_profile = session.exec(
+            select(EmployerProfile).where(EmployerProfile.user_id == user.id)
+        ).first()
+        result.append(AdminUserDetailResponse(
+            id=user.id,
+            email=user.email,
+            full_name=user.full_name,
+            phone=user.phone,
+            avatar_url=user.avatar_url,
+            is_admin=user.is_admin,
+            is_active=user.is_active,
+            created_at=user.created_at,
+            updated_at=user.updated_at,
+            worker_profile=worker_profile,
+            employer_profile=employer_profile,
+        ))
+    return result
 
 
 @router.get(
@@ -883,6 +907,80 @@ def get_payments_awaiting_admin(
     return payments
 
 
+def _safe_parse_json_dict(value: str | None) -> dict | None:
+    """Parse JSON string dari DB menjadi dict. Kembalikan None jika gagal."""
+    if value is None:
+        return None
+    if isinstance(value, dict):
+        return value
+    try:
+        parsed = json.loads(value)
+        if isinstance(parsed, dict):
+            return parsed
+    except (json.JSONDecodeError, TypeError):
+        pass
+    return None
+
+
+def _safe_parse_json_list(value: str | None) -> list[str]:
+    """Parse JSON string dari DB menjadi list. Kembalikan list kosong jika gagal."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    try:
+        parsed = json.loads(value)
+        if isinstance(parsed, list):
+            return parsed
+    except (json.JSONDecodeError, TypeError):
+        pass
+    # Fallback: comma-separated lama
+    return [x.strip() for x in value.split(",") if x.strip()]
+
+
+def _get_worker_payment_info(
+    payment: Payment,
+    session: Session,
+) -> WorkerPaymentInfo | None:
+    """
+    Fetch data pembayaran Worker dari assignment yang terkait dengan payment.
+
+    Alur: payment.assignment_id → Assignment → Application.worker_id
+          → WorkerProfile (bank_details, ewallet_details, accepted_payment_methods)
+          → User (full_name)
+
+    Kembalikan None jika payment bukan WORK_PAYMENT, assignment tidak ada,
+    atau worker profile belum dibuat.
+    """
+    if payment.type != "WORK_PAYMENT" or not payment.assignment_id:
+        return None
+
+    assignment = session.get(Assignment, payment.assignment_id)
+    if not assignment:
+        return None
+
+    application = session.get(Application, assignment.application_id)
+    if not application:
+        return None
+
+    worker_profile = session.get(WorkerProfile, application.worker_id)
+    if not worker_profile:
+        return None
+
+    # Ambil nama lengkap Worker dari tabel users
+    worker_user = session.get(User, worker_profile.user_id)
+    worker_name = worker_user.full_name if worker_user else None
+
+    return WorkerPaymentInfo(
+        worker_name=worker_name,
+        accepted_payment_methods=_safe_parse_json_list(
+            worker_profile.accepted_payment_methods
+        ),
+        bank_details=_safe_parse_json_dict(worker_profile.bank_details),
+        ewallet_details=_safe_parse_json_dict(worker_profile.ewallet_details),
+    )
+
+
 @router.get(
     "/payments/{payment_id}",
     response_model=AdminPaymentSummaryResponse,
@@ -896,7 +994,12 @@ def get_payment_detail_admin(
     payment = session.get(Payment, payment_id)
     if not payment:
         raise HTTPException(status_code=404, detail="Payment tidak ditemukan")
-    return payment
+
+    # Bangun response manual agar bisa menyertakan worker_payment_info
+    # (field yang tidak ada di model Payment secara langsung)
+    response_data = AdminPaymentSummaryResponse.model_validate(payment)
+    response_data.worker_payment_info = _get_worker_payment_info(payment, session)
+    return response_data
 
 
 @router.put(
@@ -1325,3 +1428,97 @@ def admin_disburse_payment(
     session.refresh(payment)
 
     return payment
+
+
+# ===========================================================================
+# ADMIN — PLATFORM BANK INFO CONFIGURATION
+# Admin mengatur rekening bank/e-wallet platform sebagai tujuan transfer Employer.
+# Hanya satu record aktif (singleton pattern).
+# ===========================================================================
+
+@router.get(
+    "/platform/bank-info",
+    response_model=PlatformBankInfoResponse,
+    summary="Ambil konfigurasi rekening platform (Admin)",
+)
+def admin_get_platform_bank_info(
+    session: Session = Depends(get_session),
+    current_admin: User = Depends(get_current_admin),
+):
+    """
+    Mengembalikan konfigurasi rekening platform saat ini.
+    Jika belum pernah dikonfigurasi, mengembalikan 404.
+    """
+    config = session.exec(
+        select(PlatformConfig).order_by(PlatformConfig.created_at.desc())
+    ).first()
+
+    if not config:
+        raise HTTPException(
+            status_code=404,
+            detail="Rekening platform belum dikonfigurasi.",
+        )
+    return config
+
+
+@router.put(
+    "/platform/bank-info",
+    response_model=PlatformBankInfoResponse,
+    summary="Atur/perbarui rekening platform (Admin)",
+)
+def admin_update_platform_bank_info(
+    data: PlatformBankInfoUpdate,
+    session: Session = Depends(get_session),
+    current_admin: User = Depends(get_current_admin),
+):
+    """
+    Membuat atau memperbarui konfigurasi rekening platform (upsert/singleton).
+
+    - Jika belum ada record → buat baru.
+    - Jika sudah ada → perbarui record yang ada (singleton, selalu satu baris).
+
+    Admin dapat mengubah:
+      - Tipe metode (bank/ewallet)
+      - Nama bank atau e-wallet
+      - Nomor rekening atau nomor HP
+      - Nama pemilik rekening
+      - Cabang (opsional, khusus bank)
+      - Catatan transfer (opsional)
+      - Status aktif (is_configured)
+    """
+    config = session.exec(
+        select(PlatformConfig).order_by(PlatformConfig.created_at.desc())
+    ).first()
+
+    if not config:
+        config = PlatformConfig()
+        session.add(config)
+
+    config.payment_type = data.payment_type.lower()
+    config.bank_name = data.bank_name.strip()
+    config.account_number = data.account_number.strip()
+    config.account_holder = data.account_holder.strip()
+    config.branch = data.branch.strip()
+    config.transfer_note = data.transfer_note.strip()
+    config.is_configured = data.is_configured
+    config.updated_at = datetime.now(timezone.utc)
+
+    session.commit()
+    session.refresh(config)
+
+    log_activity(
+        session,
+        user_id=current_admin.id,
+        entity_type="platform_config",
+        entity_id=config.id,
+        action="update_platform_bank_info",
+        new_value={
+            "payment_type": config.payment_type,
+            "bank_name": config.bank_name,
+            "account_number": "***" + config.account_number[-4:] if len(config.account_number) > 4 else "***",
+            "account_holder": config.account_holder,
+            "is_configured": config.is_configured,
+        },
+    )
+
+    return config

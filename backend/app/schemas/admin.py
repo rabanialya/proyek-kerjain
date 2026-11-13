@@ -121,6 +121,33 @@ class AdminPaymentDisburse(BaseModel):
     )
 
 
+class WorkerPaymentInfo(BaseModel):
+    """
+    Informasi pembayaran Worker yang akan ditampilkan Admin
+    saat akan melakukan pencairan dana.
+
+    Data ini diambil dari WorkerProfile milik Worker yang bersangkutan
+    dengan payment tersebut.
+    """
+    worker_name: str | None = None
+    """Nama lengkap Worker (dari tabel users)."""
+
+    accepted_payment_methods: List[str] = []
+    """Metode pembayaran yang diterima Worker, e.g. ["cash", "transfer_bank", "e_wallet"]."""
+
+    bank_details: Optional[dict] = None
+    """
+    Detail rekening bank Worker jika menerima transfer_bank.
+    Contoh: {"bank_name": "BCA", "account_number": "1234567890"}
+    """
+
+    ewallet_details: Optional[dict] = None
+    """
+    Detail e-wallet Worker jika menerima e_wallet.
+    Contoh: {"provider": "GoPay", "phone_number": "081234567890"}
+    """
+
+
 class AdminPaymentSummaryResponse(BaseModel):
     """Ringkasan satu payment record untuk tampilan Admin."""
     id: UUID
@@ -145,6 +172,9 @@ class AdminPaymentSummaryResponse(BaseModel):
     disbursement_notes: str | None = None
 
     created_at: datetime
+
+    # Info pembayaran Worker — None jika bukan WORK_PAYMENT atau profil belum ada
+    worker_payment_info: WorkerPaymentInfo | None = None
 
     class Config:
         from_attributes = True
