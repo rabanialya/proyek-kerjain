@@ -924,3 +924,55 @@ export async function fetchPublicWorkerProfile(profileId) {
 export async function fetchPublicEmployerProfile(profileId) {
   return apiRequestAuth(`/profiles/employer/${profileId}/public`)
 }
+
+// ── Admin: Platform Bank Info ───────────────────────────────────────────────
+
+// GET /admin/platform/bank-info — ambil konfigurasi rekening platform.
+// Throws 404 jika belum pernah dikonfigurasi.
+export async function adminFetchPlatformBankInfo() {
+  return apiRequestAuth('/admin/platform/bank-info')
+}
+
+// PUT /admin/platform/bank-info — buat/perbarui konfigurasi rekening platform.
+// body: { payment_type, bank_name, account_number, account_holder, branch?, transfer_note?, is_configured }
+export async function adminUpdatePlatformBankInfo(body) {
+  return apiRequestAuth('/admin/platform/bank-info', {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+}
+
+// ── Employer: Platform Bank Info ────────────────────────────────────────────
+
+// GET /payments/platform-bank-info — info rekening platform untuk Employer.
+// Digunakan saat employer sudah punya tagihan dan ingin mengecek rekening tujuan.
+export async function fetchPlatformBankInfo() {
+  return apiRequestAuth('/payments/platform-bank-info')
+}
+
+// ─── Ratings ────────────────────────────────────────────────────────────────
+// Semua endpoint rating memerlukan token user yang valid.
+// Backend memvalidasi bahwa hanya Worker/Employer yang terlibat dalam assignment
+// yang dapat memberikan rating, dan hanya setelah assignment.status == 'approved'.
+
+// POST /ratings — buat rating baru.
+// body: { assignment_id, to_user_id, score (1-5), review? }
+// Hanya boleh dibuat setelah assignment berstatus 'approved'.
+// Satu user hanya bisa memberikan satu rating per assignment (unique constraint di DB).
+export async function createRating(body) {
+  return apiRequestAuth('/ratings', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+}
+
+// GET /ratings/my — semua rating yang diberikan oleh user yang login (from_user_id).
+export async function fetchMyRatings() {
+  return apiRequestAuth('/ratings/my')
+}
+
+// GET /ratings/assignment/:assignmentId — semua rating untuk satu assignment.
+// Hanya Worker atau Employer yang terlibat di assignment tersebut yang dapat mengakses.
+export async function fetchRatingsByAssignment(assignmentId) {
+  return apiRequestAuth(`/ratings/assignment/${assignmentId}`)
+}

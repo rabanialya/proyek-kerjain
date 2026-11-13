@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { Bell } from 'lucide-react'
 import { useUnreadNotifications } from '../hooks/useUnreadNotifications'
 
 // Tombol lonceng notifikasi dengan indikator jumlah belum dibaca.
@@ -18,9 +19,9 @@ export default function NotificationBell({ className = '' }) {
           ? `${unreadCount} notifikasi belum dibaca`
           : 'Notifikasi'
       }
-      className={`relative inline-flex shrink-0 items-center justify-center rounded-xl border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-50 ${className}`}
+      className={`relative inline-flex shrink-0 items-center justify-center rounded-xl border border-slate-200 p-2 text-slate-600 transition hover:bg-slate-50 hover:text-slate-800 ${className}`}
     >
-      <span className="text-base leading-none" aria-hidden>🔔</span>
+      <Bell size={18} aria-hidden />
       {!loading && unreadCount > 0 && (
         <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white ring-2 ring-white">
           {unreadCount > 99 ? '99+' : unreadCount}
