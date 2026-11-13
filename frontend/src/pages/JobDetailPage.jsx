@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { Flag } from 'lucide-react'
 import {
   fetchMyWorkerJobs,
   updateAssignmentStatus,
@@ -9,6 +10,8 @@ import {
   fetchWorkEvidenceFile,
   fetchDisbursementProofFile,
 } from '../lib/api'
+import ReportModal from '../components/ReportModal'
+import RatingSection from '../components/RatingSection'
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -743,6 +746,9 @@ export default function JobDetailPage() {
   const [error, setError] = useState(null)
   const [evidenceCount, setEvidenceCount] = useState(0)
 
+  // State untuk modal laporan
+  const [reportModal, setReportModal] = useState({ open: false, type: 'user', targetId: null, targetName: '' })
+
   async function load() {
     setLoading(true)
     setError(null)
@@ -819,6 +825,7 @@ export default function JobDetailPage() {
   const cfg = STATUS_CONFIG[job.assignment_status]
 
   return (
+    <>
     <main className="min-h-screen bg-slate-100 px-4 py-8">
       <div className="mx-auto max-w-2xl space-y-5">
 
@@ -940,6 +947,55 @@ export default function JobDetailPage() {
         {/* Panel aksi — hanya tampil jika ada aksi yang tersedia */}
         <ActionPanel job={job} onStatusUpdate={load} evidenceCount={evidenceCount} />
 
+        {/* Rating Employer — hanya setelah approved */}
+        <RatingSection
+          assignmentId={job.assignment_id}
+          assignmentStatus={job.assignment_status}
+          toUserId={job.employer_user_id ?? null}
+          toUserName={job.employer_display_name}
+          role="worker"
+          accentColor="blue"
+        />
+
+        {/* Tindakan laporan — selalu tersedia setelah ditugaskan */}
+        {(job.employer_user_id || job.task_id) && (
+          <section className="rounded-2xl bg-white p-6 shadow-sm">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-slate-400">
+              Tindakan
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              {job.employer_user_id && (
+                <button
+                  onClick={() => setReportModal({
+                    open: true,
+                    type: 'user',
+                    targetId: job.employer_user_id,
+                    targetName: job.employer_display_name,
+                  })}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 transition"
+                >
+                  <Flag size={12} />
+                  Laporkan Employer
+                </button>
+              )}
+              {job.task_id && (
+                <button
+                  onClick={() => setReportModal({
+                    open: true,
+                    type: 'task',
+                    targetId: job.task_id,
+                    targetName: job.task_title,
+                  })}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+                >
+                  <Flag size={12} />
+                  Laporkan Task
+                </button>
+              )}
+            </div>
+          </section>
+        )}
+
         {/* Footer */}
         <p className="pb-4 text-center text-xs text-slate-300">
           ID Penugasan: {job.assignment_id}
@@ -947,5 +1003,15 @@ export default function JobDetailPage() {
 
       </div>
     </main>
+
+    {/* Modal laporan */}
+    <ReportModal
+      isOpen={reportModal.open}
+      onClose={() => setReportModal((prev) => ({ ...prev, open: false }))}
+      reportType={reportModal.type}
+      targetId={reportModal.targetId}
+      targetName={reportModal.targetName}
+    />
+  </>
   )
 }

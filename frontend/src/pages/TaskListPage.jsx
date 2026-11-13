@@ -202,12 +202,12 @@ export default function TaskListPage() {
         </div>
 
         {/* ── Filter baris ── */}
-        <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="grid grid-cols-2 gap-3">
           {/* Filter lokasi */}
           <select
             value={locationFilter}
             onChange={(e) => setLocationFilter(e.target.value)}
-            className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
           >
             <option value="">Semua lokasi</option>
             {uniqueLocations.map((loc) => (
@@ -221,7 +221,7 @@ export default function TaskListPage() {
           <select
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
-            className="flex-1 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
+            className="w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-100"
           >
             <option value="">Semua kategori</option>
             {categories

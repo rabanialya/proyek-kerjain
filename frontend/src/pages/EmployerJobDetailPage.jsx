@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { Flag } from 'lucide-react'
 import {
   fetchWorkEvidences,
   updateAssignmentStatus,
   settlePayment,
   uploadTransferProof,
   fetchPaymentsByAssignment,
+  fetchPlatformBankInfo,
   createDispute,
   fetchDisbursementProofFile,
   fetchWorkEvidenceFile,
@@ -13,6 +15,8 @@ import {
 import { useEmployerJobs } from '../hooks/useEmployerJobs'
 import { EMPLOYER_STATUS_CONFIG } from './EmployerJobsPage'
 import { PAYMENT_STATUS_LABELS as PAYMENT_STATUS_LABELS_SHARED } from '../lib/statusLabels'
+import ReportModal from '../components/ReportModal'
+import RatingSection from '../components/RatingSection'
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 // API_BASE_URL dihapus — semua file diakses via endpoint terlindungi, bukan URL publik.
@@ -430,6 +434,20 @@ function PaymentPanel({ job, onStatusUpdate }) {
   // URL bukti disbursement — dimuat setelah status disbursed terdeteksi
   const [disbursementProofUrl, setDisbursementProofUrl] = useState(null)
 
+  // Info rekening platform — diambil dari endpoint, diperbarui juga saat settle
+  const [platformBankInfo, setPlatformBankInfo] = useState(null)
+
+  // Ambil info rekening platform dari endpoint (independen dari settle)
+  async function loadPlatformBankInfo() {
+    try {
+      const info = await fetchPlatformBankInfo()
+      setPlatformBankInfo(info)
+    } catch (_) {
+      // Tidak ada konfigurasi — biarkan null, tampilkan warning
+      setPlatformBankInfo({ is_configured: false })
+    }
+  }
+
   // Muat payment yang sudah ada saat halaman dibuka (idempoten)
   async function loadExistingPayments() {
     try {
@@ -462,6 +480,7 @@ function PaymentPanel({ job, onStatusUpdate }) {
 
   useEffect(() => {
     loadExistingPayments()
+    loadPlatformBankInfo()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [job.assignment_id])
 
@@ -472,6 +491,10 @@ function PaymentPanel({ job, onStatusUpdate }) {
       const result = await settlePayment(job.assignment_id)
       setSettlement(result)
       setPayments({ work_payment: result.work_payment, platform_fee: result.platform_fee })
+      // Perbarui info rekening dari settlement response (prioritas utama)
+      if (result.platform_bank_info) {
+        setPlatformBankInfo(result.platform_bank_info)
+      }
     } catch (err) {
       setSettleError(err.message ?? 'Gagal membuat tagihan.')
     } finally {
@@ -557,7 +580,7 @@ function PaymentPanel({ job, onStatusUpdate }) {
   const platformFeeAmount = settlement?.platform_fee_amount ?? pf?.amount ?? 0
   const totalTransfer = settlement?.total_transfer ?? (Number(workerWage) + Number(platformFeeAmount))
   const referenceCode = settlement?.reference_code ?? wp.transaction_reference ?? '—'
-  const bankInfo = settlement?.platform_bank_info ?? null
+  const bankInfo = platformBankInfo
 
   // Status upload: bisa upload jika pending atau rejected
   const canUploadProof = ['pending', 'rejected'].includes(wp.status)
@@ -601,8 +624,18 @@ function PaymentPanel({ job, onStatusUpdate }) {
         </p>
         {bankInfo?.is_configured ? (
           <div className="space-y-1 text-sm text-slate-700">
-            <p><span className="text-slate-400 w-28 inline-block">Bank</span> <strong>{bankInfo.bank_name}</strong></p>
-            <p><span className="text-slate-400 w-28 inline-block">No. Rekening</span> <strong className="font-mono">{bankInfo.account_number}</strong></p>
+            <p>
+              <span className="text-slate-400 w-28 inline-block">
+                {bankInfo.payment_type === 'ewallet' ? 'E-Wallet' : 'Bank'}
+              </span>{' '}
+              <strong>{bankInfo.bank_name}</strong>
+            </p>
+            <p>
+              <span className="text-slate-400 w-28 inline-block">
+                {bankInfo.payment_type === 'ewallet' ? 'No. HP' : 'No. Rekening'}
+              </span>{' '}
+              <strong className="font-mono">{bankInfo.account_number}</strong>
+            </p>
             <p><span className="text-slate-400 w-28 inline-block">Atas Nama</span> <strong>{bankInfo.account_holder}</strong></p>
             {bankInfo.branch && (
               <p><span className="text-slate-400 w-28 inline-block">Cabang</span> {bankInfo.branch}</p>
@@ -959,6 +992,9 @@ export default function EmployerJobDetailPage() {
   const [job, setJob] = useState(null)
   const [notFound, setNotFound] = useState(false)
 
+  // State untuk modal laporan
+  const [reportModal, setReportModal] = useState({ open: false, type: 'user', targetId: null, targetName: '' })
+
   // Cari job yang sesuai dari list setelah data dimuat
   useEffect(() => {
     if (loading) return
@@ -1027,6 +1063,7 @@ export default function EmployerJobDetailPage() {
   const cfg = EMPLOYER_STATUS_CONFIG[job.assignment_status]
 
   return (
+    <>
     <main className="min-h-screen bg-slate-100 px-4 py-8">
       <div className="mx-auto max-w-2xl space-y-5">
 
@@ -1139,6 +1176,39 @@ export default function EmployerJobDetailPage() {
         {/* Panel aksi Employer */}
         <EmployerActionPanel job={job} onStatusUpdate={handleStatusUpdate} />
 
+        {/* Rating Worker — hanya setelah approved */}
+        <RatingSection
+          assignmentId={job.assignment_id}
+          assignmentStatus={job.assignment_status}
+          toUserId={job.worker_user_id ?? null}
+          toUserName={job.worker_display_name}
+          role="employer"
+          accentColor="emerald"
+        />
+
+        {/* Tindakan laporan */}
+        {job.worker_user_id && (
+          <section className="rounded-2xl bg-white p-6 shadow-sm">
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-slate-400">
+              Tindakan
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setReportModal({
+                  open: true,
+                  type: 'user',
+                  targetId: job.worker_user_id,
+                  targetName: job.worker_display_name,
+                })}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-red-200 bg-white px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 transition"
+              >
+                <Flag size={12} />
+                Laporkan Worker
+              </button>
+            </div>
+          </section>
+        )}
+
         {/* Footer */}
         <p className="pb-4 text-center text-xs text-slate-300">
           ID Penugasan: {job.assignment_id}
@@ -1146,5 +1216,15 @@ export default function EmployerJobDetailPage() {
 
       </div>
     </main>
+
+    {/* Modal laporan */}
+    <ReportModal
+      isOpen={reportModal.open}
+      onClose={() => setReportModal((prev) => ({ ...prev, open: false }))}
+      reportType={reportModal.type}
+      targetId={reportModal.targetId}
+      targetName={reportModal.targetName}
+    />
+    </>
   )
 }

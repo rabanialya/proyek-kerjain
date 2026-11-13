@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { fetchApplicationsByTask, fetchMyTasks, updateApplicationStatus, fetchMyAssignments, createAssignment } from '../lib/api'
-import { CheckCircle2, XCircle, Star, AlertTriangle, UserCircle, Search, ClipboardList } from 'lucide-react'
+import { CheckCircle2, XCircle, Star, AlertTriangle, UserCircle, Search, ClipboardList, Flag } from 'lucide-react'
+import ReportModal from '../components/ReportModal'
 
 // ─── Komponen kecil ────────────────────────────────────────────────────────
 
@@ -70,7 +71,7 @@ function ConfirmDialog({ isOpen, action, workerName, onConfirm, onCancel, loadin
 
 // ─── Kartu pelamar ─────────────────────────────────────────────────────────
 
-function ApplicantCard({ application, workerSlotFull, onAction, hasAssignment, onAssign, assignLoading, onViewProgress }) {
+function ApplicantCard({ application, workerSlotFull, onAction, hasAssignment, onAssign, assignLoading, onViewProgress, onReport }) {
   const { worker, status } = application
   const isPending = status === 'pending'
   const isAccepted = status === 'accepted'
@@ -204,6 +205,18 @@ function ApplicantCard({ application, workerSlotFull, onAction, hasAssignment, o
           )}
         </div>
       )}
+
+      {/* Tombol laporkan worker — tampil untuk lamaran accepted */}
+      {isAccepted && worker.user_id && onReport && (
+        <div className="mt-2 flex justify-end">
+          <button
+            onClick={() => onReport(worker.user_id, worker.full_name)}
+            className="inline-flex items-center gap-1 rounded-lg border border-red-100 px-2.5 py-1 text-xs text-red-500 hover:bg-red-50 transition"
+          >
+            <Flag size={11} /> Laporkan
+          </button>
+        </div>
+      )}
     </div>
   )
 }
@@ -236,6 +249,9 @@ export default function TaskApplications() {
   const [assignLoading, setAssignLoading] = useState(null)
   const [assignError, setAssignError]     = useState(null)
   const [assignSuccess, setAssignSuccess] = useState(null)
+
+  // State untuk modal laporan
+  const [reportModal, setReportModal] = useState({ open: false, targetId: null, targetName: '' })
 
   // ── Load data ──
   const load = useCallback(async () => {
@@ -477,6 +493,7 @@ export default function TaskApplications() {
                         onAssign={handleAssign}
                         assignLoading={assignLoading}
                         onViewProgress={handleViewProgress}
+                        onReport={(userId, name) => setReportModal({ open: true, targetId: userId, targetName: name })}
                       />
                     ))}
                   </div>
@@ -500,6 +517,7 @@ export default function TaskApplications() {
                         onAssign={handleAssign}
                         assignLoading={assignLoading}
                         onViewProgress={handleViewProgress}
+                        onReport={(userId, name) => setReportModal({ open: true, targetId: userId, targetName: name })}
                       />
                     ))}
                   </div>
@@ -523,6 +541,7 @@ export default function TaskApplications() {
                         onAssign={handleAssign}
                         assignLoading={assignLoading}
                         onViewProgress={handleViewProgress}
+                        onReport={(userId, name) => setReportModal({ open: true, targetId: userId, targetName: name })}
                       />
                     ))}
                   </div>
@@ -534,6 +553,15 @@ export default function TaskApplications() {
 
         </div>
       </main>
+
+      {/* Modal laporan worker */}
+      <ReportModal
+        isOpen={reportModal.open}
+        onClose={() => setReportModal((prev) => ({ ...prev, open: false }))}
+        reportType="user"
+        targetId={reportModal.targetId}
+        targetName={reportModal.targetName}
+      />
     </>
   )
 }

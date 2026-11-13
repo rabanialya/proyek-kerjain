@@ -4,8 +4,9 @@ import { fetchCategories, fetchTaskById } from '../lib/api'
 import { useApplicationStatus } from '../hooks/useApplicationStatus'
 import {
   Globe, MapPin, Shuffle, AlertTriangle, Lock, Clock,
-  Building2, CheckCircle2, Hourglass, XCircle, FileText,
+  Building2, CheckCircle2, Hourglass, XCircle, FileText, Flag,
 } from 'lucide-react'
+import ReportModal from '../components/ReportModal'
 
 // ─── Konstanta label ────────────────────────────────────────────────────────
 
@@ -263,6 +264,7 @@ export default function TaskDetailPage() {
   const [categoryName, setCategoryName] = useState(null)
   const [loading, setLoading]         = useState(true)
   const [error, setError]             = useState(null)
+  const [reportModal, setReportModal] = useState({ open: false, type: 'user', targetId: null, targetName: '' })
 
   useEffect(() => {
     let active = true
@@ -350,6 +352,7 @@ export default function TaskDetailPage() {
     : formatRupiah(task.wage_amount)
 
   return (
+    <>
     <main className="min-h-screen bg-slate-100 px-4 py-8">
       <div className="mx-auto max-w-2xl space-y-5">
 
@@ -528,6 +531,31 @@ export default function TaskDetailPage() {
         {/* ── Panel lamaran ── */}
         <ApplicationPanel taskId={taskId} task={task} />
 
+        {/* ── Tindakan laporan ── */}
+        <section className="rounded-2xl bg-white p-6 shadow-sm">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-widest text-slate-400">
+            Laporkan
+          </h2>
+          <p className="mb-3 text-xs text-slate-500">
+            Temukan sesuatu yang mencurigakan atau melanggar aturan platform?
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {/* Laporkan task */}
+            <button
+              onClick={() => setReportModal({
+                open: true,
+                type: 'task',
+                targetId: task.id,
+                targetName: task.title,
+              })}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition"
+            >
+              <Flag size={12} />
+              Laporkan Task Ini
+            </button>
+          </div>
+        </section>
+
         {/* Footer */}
         <p className="pb-4 text-center text-xs text-slate-300">
           ID: {task.id} · Dibuat {formatDate(task.created_at)}
@@ -535,5 +563,15 @@ export default function TaskDetailPage() {
 
       </div>
     </main>
+
+    {/* Modal laporan */}
+    <ReportModal
+      isOpen={reportModal.open}
+      onClose={() => setReportModal((prev) => ({ ...prev, open: false }))}
+      reportType={reportModal.type}
+      targetId={reportModal.targetId}
+      targetName={reportModal.targetName}
+    />
+  </>
   )
 }
